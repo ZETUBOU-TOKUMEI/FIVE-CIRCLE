@@ -48,6 +48,20 @@
       transform: rotateY(180deg) translateZ(26px);
       filter: drop-shadow(0 24px 32px rgba(15, 23, 42, 0.16)) drop-shadow(0 6px 10px rgba(15, 23, 42, 0.08));
     }
+    /* 静止时“压平”3D：perspective 下 translateZ 会让整张卡在合成器里被非整数倍缩放（约 1.0176x）重采样，
+       轮盘转到不同角度时图层边界随之变化，像素对齐就不同 → 有的位置清晰、有的位置发糊。
+       静止时改用与透视投影完全等价的 2D scale 平面绘制（矢量按目标尺寸直接栅格化），翻转动画期间才恢复真 3D。 */
+    .scene.is-resting { perspective: none; }
+    .scene.is-resting .device-card { transform-style: flat; }
+    .scene.is-resting .device-face { backface-visibility: visible; -webkit-backface-visibility: visible; }
+    .scene.is-resting .device-thickness-layer { transform: scale(calc(1500 / (1500 - var(--z)))) !important; z-index: var(--zf); }
+    .scene.is-resting .device-face-front { transform: none; z-index: 100; }
+    .scene.is-resting .device-face-front > svg { transform: scale(calc(1500 / 1474)); }
+    .scene.is-resting .device-card:not(.is-flipped) .device-face-back { visibility: hidden; }
+    .scene.is-resting .device-card.is-flipped .device-thickness-layer { transform: scale(calc(1500 / (1500 + var(--z)))) !important; z-index: var(--zb); }
+    .scene.is-resting .device-card.is-flipped .device-face-back { transform: rotateY(180deg); z-index: 100; }
+    .scene.is-resting .device-card.is-flipped .device-face-back > svg { transform: scale(calc(1500 / 1474)); }
+    .scene.is-resting .device-card.is-flipped .device-face-front { visibility: hidden; }
     /* Physical Acrylic Sandwich Thickness Layers between Z=-25px and Z=+25px */
     .device-thickness-layer {
       position: absolute;
@@ -274,7 +288,7 @@
     </div>
 
     <!-- 机器本体（正面 / 背面 3D 卡片） -->
-    <div class="scene">
+    <div class="scene is-resting">
       <div id="device-card" class="device-card">
 
           <!-- ================= 24-LAYER 3D PHYSICAL ACRYLIC & GEAR SANDWICH (Z = -24px to +24px, 3x Thicker!) ================= -->
@@ -1030,6 +1044,9 @@
         const div = document.createElement("div");
         div.className = "device-thickness-layer";
         div.style.transform = `translateZ(${z}px)`;
+        div.style.setProperty("--z", z);
+        div.style.setProperty("--zf", z + 50);
+        div.style.setProperty("--zb", 50 - z);
 
         let fill = "#090a0f";
         let stroke = "#27272a";
@@ -1445,9 +1462,18 @@
 
       // 正反面翻转
       const flipBtn = document.getElementById("btn-flip");
+      document.getElementById("device-card").addEventListener("transitionend", (e) => {
+        if (e.target === e.currentTarget && e.propertyName === "transform") {
+          e.currentTarget.parentElement.classList.add("is-resting");
+        }
+      });
       flipBtn.addEventListener("click", () => {
         state.isFlipped = !state.isFlipped;
-        document.getElementById("device-card").classList.toggle("is-flipped", state.isFlipped);
+        const card = document.getElementById("device-card");
+        const scene = card.parentElement;
+        scene.classList.remove("is-resting"); // 翻转期间恢复真 3D
+        void card.offsetWidth;
+        card.classList.toggle("is-flipped", state.isFlipped);
         document.getElementById("flip-label").textContent = state.isFlipped ? "查看正面" : "查看背面";
       });
 
