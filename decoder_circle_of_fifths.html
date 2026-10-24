@@ -2,8 +2,20 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Decoder: Circle of Fifths | 1:1 机械五度圈解码器完全复刻版</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Decoder · 五度圈解码器</title>
+  <meta name="description" content="机械五度圈解码器的网页复刻：转到任意主音，一眼看到七级和弦、调号与构成音，可试听；附带能卷起来的手卷钢琴窗。">
+  <meta name="theme-color" content="#eab308">
+  <meta name="color-scheme" content="light">
+
+  <!-- 分享卡片 -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Decoder · 五度圈解码器">
+  <meta property="og:description" content="转到任意主音，七级和弦、调号与构成音直接露出来。可试听，附手卷钢琴窗。">
+  <meta name="twitter:card" content="summary">
+
+  <!-- 图标直接用内联 SVG，不额外增加请求 -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23eab308'/%3E%3Ccircle cx='32' cy='32' r='16' fill='%23fffdf5'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%23111318'/%3E%3Ccircle cx='32' cy='32' r='3.4' fill='%23eab308'/%3E%3C/svg%3E">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
@@ -98,6 +110,7 @@
 
     /* ---------- 版式：页面上只留这台机器 ---------- */
     .stage {
+      position: relative;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -105,47 +118,324 @@
       justify-content: center;
       gap: 20px;
       padding: 26px 20px 30px;
+      overflow: hidden;
     }
+
+    /* 重置时用同一套缓动把位置和大小平滑送回默认值 */
+    .scene.is-resetting { transition: transform 0.52s cubic-bezier(0.22, 1, 0.36, 1); }
+    .paper.is-resetting { transition: transform 0.52s cubic-bezier(0.22, 1, 0.36, 1); }
+    .roll-piano.is-resetting { transition: transform 0.52s cubic-bezier(0.22, 1, 0.36, 1); }
 
     .scene {
       position: relative;
+      z-index: 5;
       width: 100%;
       max-width: min(74vh, 680px);
       perspective: 1500px;
       display: flex;
       align-items: center;
       justify-content: center;
+      transform-origin: 50% 50%;
     }
-    /* 台面上的柔和接触阴影 */
-    .scene::after {
+    /* 面板投影只由 .device-face 的 drop-shadow 提供（原先那条贴地的接触阴影已移除） */
+
+    /* ---------- 说明文档：一张实体白纸（在五度圈下层） ---------- */
+    .paper {
+      position: absolute;
+      left: 64px;
+      top: 88px;
+      width: 520px;
+      height: 720px;
+      z-index: 2;
+      transform-origin: 50% 50%;
+      touch-action: none;
+      pointer-events: none;   /* 只有纸本身和纸团可点，空白处不挡下层 */
+    }
+
+    /* 纸：微微歪一点，像随手放在桌上
+       外层只负责投影和整体形变，裁剪（揉皱轮廓）放到内层，否则 box-shadow 会被一起裁掉 */
+    .paper-sheet {
+      position: absolute;
+      inset: 0;
+      border-radius: 2px;
+      box-shadow:
+        0 0 0 1px rgba(110, 100, 82, 0.12),
+        0 1px 2px rgba(15, 23, 42, 0.1),
+        0 5px 12px -5px rgba(15, 23, 42, 0.22),
+        0 20px 38px -22px rgba(15, 23, 42, 0.5),
+        0 48px 80px -60px rgba(15, 23, 42, 0.45);
+      transform: rotate(-0.7deg);
+      transform-origin: 50% 50%;
+      transition:
+        transform 0.62s cubic-bezier(0.65, 0, 0.35, 1),
+        opacity 0.2s ease 0.24s,
+        filter 0.45s ease,
+        box-shadow 0.45s ease;
+      pointer-events: auto;
+      cursor: pointer;
+      will-change: transform;
+    }
+    .paper-crumple {
+      position: absolute;
+      inset: 0;
+      background-color: #fffdf8;
+      background-image:
+        repeating-linear-gradient(0deg, rgba(120, 110, 88, 0.03) 0 1px, rgba(120, 110, 88, 0) 1px 3px),
+        repeating-linear-gradient(90deg, rgba(120, 110, 88, 0.02) 0 1px, rgba(120, 110, 88, 0) 1px 4px),
+        radial-gradient(120% 90% at 18% 8%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 60%);
+      border-radius: 2px;
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset;
+      overflow: hidden;
+      clip-path: polygon(0% 0%, 25% 0%, 50% 0%, 75% 0%, 100% 0%, 100% 25%, 100% 50%, 100% 75%, 100% 100%, 75% 100%, 50% 100%, 25% 100%, 0% 100%, 0% 75%, 0% 50%, 0% 25%);
+      transition: clip-path 0.62s cubic-bezier(0.65, 0, 0.35, 1);
+      will-change: clip-path;
+    }
+    /* 揉皱时浮出的褶皱 */
+    .paper-crumple::before {
       content: "";
       position: absolute;
-      left: 50%;
-      bottom: -12px;
-      width: 60%;
-      height: 26px;
-      transform: translateX(-50%);
-      border-radius: 50%;
-      background: radial-gradient(closest-side, rgba(15, 23, 42, 0.2), rgba(15, 23, 42, 0) 72%);
-      filter: blur(7px);
-      z-index: -1;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      background:
+        radial-gradient(ellipse at 50% 46%, rgba(255, 255, 255, 0.9) 0 5%, rgba(255, 255, 255, 0) 42%),
+        conic-gradient(from 18deg at 50% 48%, rgba(120, 110, 88, 0.2) 0 5%, rgba(255, 255, 255, 0.62) 7% 10%, rgba(120, 110, 88, 0.04) 12% 20%, rgba(255, 255, 255, 0.74) 22% 25%, rgba(120, 110, 88, 0.16) 27% 31%, rgba(255, 255, 255, 0.04) 34% 45%, rgba(120, 110, 88, 0.2) 48% 52%, rgba(255, 255, 255, 0.72) 54% 58%, rgba(120, 110, 88, 0.04) 61% 72%, rgba(255, 255, 255, 0.76) 75% 78%, rgba(120, 110, 88, 0.15) 80% 84%, rgba(255, 255, 255, 0.05) 87% 96%, rgba(120, 110, 88, 0.2) 98% 100%),
+        linear-gradient(64deg, transparent 45%, rgba(120, 110, 88, 0.28) 47%, transparent 50%),
+        linear-gradient(-28deg, transparent 37%, rgba(255, 255, 255, 0.9) 39%, transparent 42%),
+        linear-gradient(112deg, transparent 57%, rgba(120, 110, 88, 0.2) 59%, transparent 62%),
+        linear-gradient(18deg, transparent 25%, rgba(120, 110, 88, 0.16) 27%, transparent 30%),
+        linear-gradient(-72deg, transparent 68%, rgba(255, 255, 255, 0.82) 70%, transparent 73%);
+      transition: opacity 0.24s ease;
+    }
+    /* 纸张对折过的那道折痕 */
+    .paper-crumple::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 63%;
+      width: 14px;
+      transform: translateX(-7px);
+      background: linear-gradient(90deg,
+        rgba(120, 110, 88, 0) 0%,
+        rgba(120, 110, 88, 0.055) 45%,
+        rgba(120, 110, 88, 0.02) 55%,
+        rgba(120, 110, 88, 0) 100%);
+      transition: opacity 0.16s ease;
       pointer-events: none;
     }
-    /* 面板投影由 .device-face 的 drop-shadow 负责 */
+    .paper.is-dragging .paper-sheet { cursor: grabbing; }
 
-    /* ---------- 顶部控制条 ---------- */
+    /* 纸上的字 */
+    .paper-content {
+      position: absolute;
+      inset: 0;
+      overflow-y: auto;
+      padding: 30px 42px 26px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #34322c;
+      transition: opacity 0.2s ease 0.2s;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    .paper-content::-webkit-scrollbar { display: none; }
+    .paper-content h2 {
+      margin: 0 0 4px;
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      color: #1e1c17;
+    }
+    .paper-meta {
+      margin: 0 0 22px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid rgba(110, 100, 82, 0.18);
+      font-size: 11.5px;
+      letter-spacing: 0.5px;
+      color: #a49c8d;
+    }
+    .paper-content h3 {
+      margin: 14px 0 4px;
+      font-size: 13px;
+      font-weight: 800;
+      color: #1e1c17;
+    }
+    .paper-content h3:first-of-type { margin-top: 0; }
+    .paper-content p { margin: 0 0 7px; }
+    .paper-content ul,
+    .paper-content ol { margin: 0 0 8px; padding-left: 19px; }
+    .paper-content li { margin-bottom: 3px; }
+    .paper-content code {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 11.5px;
+      background: rgba(110, 100, 82, 0.08);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+    .paper-endnote {
+      margin-top: 22px;
+      font-size: 11px;
+      color: #b3ab9c;
+      letter-spacing: 0.3px;
+    }
+
+    /* 收起后：一团揉皱的纸 */
+    .paper-ball {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 88px;
+      height: 88px;
+      margin: -44px 0 0 -44px;
+      border-radius: 46% 54% 49% 51% / 53% 47% 53% 47%;
+      background:
+        /* 高光 */
+        radial-gradient(circle at 29% 25%, rgba(255, 255, 255, 0.95) 0 8%, rgba(255, 255, 255, 0) 36%),
+        /* 右下暗面 */
+        radial-gradient(circle at 74% 76%, rgba(120, 110, 88, 0.22) 0 12%, rgba(120, 110, 88, 0) 48%),
+        /* 几道折痕 */
+        linear-gradient(56deg, rgba(0, 0, 0, 0) 41%, rgba(120, 110, 88, 0.2) 43%, rgba(120, 110, 88, 0) 45%),
+        linear-gradient(-34deg, rgba(0, 0, 0, 0) 58%, rgba(120, 110, 88, 0.15) 60%, rgba(120, 110, 88, 0) 62%),
+        linear-gradient(124deg, rgba(0, 0, 0, 0) 26%, rgba(255, 255, 255, 0.85) 28%, rgba(255, 255, 255, 0) 30%),
+        linear-gradient(-98deg, rgba(0, 0, 0, 0) 68%, rgba(120, 110, 88, 0.13) 70%, rgba(120, 110, 88, 0) 72%),
+        linear-gradient(18deg, rgba(0, 0, 0, 0) 74%, rgba(120, 110, 88, 0.16) 77%, rgba(120, 110, 88, 0) 80%),
+        /* 球体本身 */
+        radial-gradient(circle at 46% 42%, #fcfbf7 0 36%, #f0ede5 62%, #dedacd 85%, #ccc6b7 100%);
+      box-shadow:
+        0 2px 3px -1px rgba(15, 23, 42, 0.18),
+        0 14px 22px -12px rgba(15, 23, 42, 0.5),
+        inset -9px -11px 18px rgba(120, 110, 88, 0.24),
+        inset 7px 9px 15px rgba(255, 255, 255, 0.95),
+        0 0 0 1px rgba(120, 110, 88, 0.1);
+      opacity: 0;
+      transform: scale(0.2) rotate(-30deg);
+      pointer-events: none;
+      cursor: pointer;
+      transition: transform 0.5s cubic-bezier(0.34, 1.4, 0.64, 1), opacity 0.26s ease;
+      will-change: transform;
+    }
+
+    /* 揉纸团：纸边先被挤成不规则的一块，褶皱同时浮现，最后收进去 */
+    .paper-ball::before,
+    .paper-ball::after {
+      content: "";
+      position: absolute;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease 0.24s, transform 0.54s cubic-bezier(0.2, 0.8, 0.25, 1) 0.2s;
+    }
+    .paper-ball::before {
+      inset: 7px 8px 10px;
+      border-radius: 45% 55% 48% 52% / 56% 42% 58% 44%;
+      background:
+        radial-gradient(ellipse at 38% 28%, rgba(255, 255, 255, 0.88), transparent 42%),
+        conic-gradient(from 8deg at 52% 48%, rgba(120, 110, 88, 0.3) 0 9%, rgba(255, 255, 255, 0.78) 11% 17%, rgba(120, 110, 88, 0.08) 19% 30%, rgba(255, 255, 255, 0.82) 32% 39%, rgba(120, 110, 88, 0.26) 41% 48%, rgba(255, 255, 255, 0.12) 50% 61%, rgba(120, 110, 88, 0.28) 63% 69%, rgba(255, 255, 255, 0.84) 71% 78%, rgba(120, 110, 88, 0.08) 80% 90%, rgba(255, 255, 255, 0.72) 92% 100%);
+      clip-path: polygon(50% 0%, 66% 7%, 82% 4%, 91% 19%, 100% 35%, 91% 49%, 97% 64%, 83% 77%, 76% 94%, 58% 91%, 44% 100%, 30% 88%, 12% 89%, 10% 70%, 0% 57%, 8% 42%, 3% 25%, 20% 15%, 32% 3%);
+      box-shadow: inset 3px 3px 7px rgba(255, 255, 255, 0.72), inset -4px -5px 8px rgba(91, 82, 67, 0.22);
+      transform: rotate(-26deg) scale(0.72);
+    }
+    .paper-ball::after {
+      inset: 13px 14px 15px;
+      border-radius: 48% 52% 43% 57% / 54% 45% 55% 46%;
+      background:
+        linear-gradient(145deg, transparent 0 43%, rgba(100, 90, 72, 0.32) 45%, rgba(255, 255, 255, 0.78) 48%, transparent 51%),
+        linear-gradient(34deg, transparent 0 48%, rgba(100, 90, 72, 0.24) 50%, rgba(255, 255, 255, 0.76) 53%, transparent 56%),
+        linear-gradient(86deg, transparent 0 40%, rgba(100, 90, 72, 0.22) 42%, rgba(255, 255, 255, 0.66) 45%, transparent 48%);
+      clip-path: polygon(50% 0%, 73% 10%, 100% 32%, 87% 56%, 96% 78%, 68% 100%, 45% 86%, 24% 96%, 0% 69%, 16% 48%, 4% 27%, 32% 11%);
+      transform: rotate(38deg) scale(0.55);
+    }
+
+    .paper.is-collapsed .paper-sheet {
+      transform: rotate(720deg) scale(0.16) skew(8deg, -7deg);
+      filter: blur(0.2px) brightness(0.98);
+      opacity: 0;
+      pointer-events: none;
+      box-shadow: none;
+      transition:
+        transform 0.62s cubic-bezier(0.65, 0, 0.35, 1),
+        opacity 0.14s ease 0.48s,
+        filter 0.5s ease,
+        box-shadow 0.3s ease;
+    }
+    .paper.is-collapsed .paper-crumple {
+      clip-path: polygon(44% 33%, 49% 29%, 56% 31%, 62% 36%, 66% 43%, 63% 49%, 67% 55%, 61% 61%, 55% 66%, 48% 63%, 42% 68%, 36% 62%, 34% 54%, 38% 48%, 35% 40%, 39% 35%);
+      transition: clip-path 0.62s cubic-bezier(0.65, 0, 0.35, 1);
+    }
+    .paper.is-collapsed .paper-crumple::before {
+      opacity: 1;
+      transition: opacity 0.24s ease 0.04s;
+    }
+    .paper.is-collapsed .paper-ball {
+      opacity: 1;
+      transform: scale(1) rotate(0deg);
+      pointer-events: auto;
+      transition: opacity 0.2s ease 0.2s, transform 0.54s cubic-bezier(0.2, 0.8, 0.25, 1) 0.2s;
+    }
+    .paper.is-collapsed .paper-ball::before,
+    .paper.is-collapsed .paper-ball::after {
+      opacity: 1;
+      transform: rotate(0deg) scale(1);
+    }
+    .paper.is-collapsed .paper-crumple::after {
+      opacity: 0;
+    }
+    .paper.is-collapsed .paper-content {
+      opacity: 0;
+      transition: opacity 0.12s ease;
+    }
+    .paper.is-dragging .paper-ball { cursor: grabbing; }
+
+    .paper-handle {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      margin: -20px 0 0 -20px;
+      border-radius: 50%;
+      z-index: 3;
+      touch-action: none;
+      pointer-events: auto;
+    }
+    .paper-nw { left: 0; top: 0; cursor: nwse-resize; }
+    .paper-ne { left: 100%; top: 0; cursor: nesw-resize; }
+    .paper-sw { left: 0; top: 100%; cursor: nesw-resize; }
+    .paper-se { left: 100%; top: 100%; cursor: nwse-resize; }
+    /* 收起时手柄贴到纸团四角 */
+    .paper.is-collapsed .paper-nw { left: calc(50% - 46px); top: calc(50% - 46px); }
+    .paper.is-collapsed .paper-ne { left: calc(50% + 46px); top: calc(50% - 46px); }
+    .paper.is-collapsed .paper-sw { left: calc(50% - 46px); top: calc(50% + 46px); }
+    .paper.is-collapsed .paper-se { left: calc(50% + 46px); top: calc(50% + 46px); }
+
+    /* ---------- 顶部控制条（默认置顶，可拖动 / 可缩放） ---------- */
     .dock {
+      position: absolute;
+      top: 18px;
+      left: 0;
+      right: 0;
+      width: max-content;
+      margin: 0 auto;
+      z-index: 10;
       display: flex;
       align-items: center;
       gap: 4px;
       padding: 7px 10px;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.82);
+      background: rgba(255, 255, 255, 0.88);
       border: 1px solid rgba(15, 23, 42, 0.09);
       box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 26px -14px rgba(15, 23, 42, 0.25);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
+      transform-origin: 50% 50%;
+      cursor: grab;
+      touch-action: none;
     }
+    .dock.is-cursor-nwse { cursor: nwse-resize; }
+    .dock.is-cursor-nesw { cursor: nesw-resize; }
+    .dock.is-dragging,
+    .dock.is-dragging.is-cursor-nwse,
+    .dock.is-dragging.is-cursor-nesw { cursor: grabbing; }
+
+
     .swatches {
       display: flex;
       gap: 7px;
@@ -196,47 +486,65 @@
     }
     .ctl:hover { background: rgba(15, 23, 42, 0.055); color: #111827; }
     .ctl svg { width: 14px; height: 14px; }
-    .ctl-primary { background: #171a21; color: #ffffff; }
-    .ctl-primary:hover { background: #2a2f39; color: #ffffff; }
-    .ctl.is-off { color: #b6bcc5; }
-    .dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: #d5dae0;
-      transition: background 0.16s ease;
-    }
-    .dot.dot-on { background: #eab308; }
 
-    /* ---------- 底部提示 ---------- */
-    .hint {
-      margin: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-wrap: wrap;
-      gap: 9px;
-      font-size: 12.5px;
-      color: #9aa3ae;
-      letter-spacing: 0.2px;
+    .ctl.is-off { color: #b6bcc5; }
+    /* 静音时在"声音"两字上打一个红叉：从左边扫出来，带一点缩放回弹 */
+    #btn-audio .ctl-text {
+      position: relative;
+      transition: color 0.18s ease;
     }
-    .hint kbd {
-      font-family: 'JetBrains Mono', ui-monospace, monospace;
-      font-size: 11px;
-      font-weight: 600;
-      color: #6b7280;
-      padding: 2px 6px;
-      margin: 0 1px;
-      border: 1px solid rgba(15, 23, 42, 0.13);
-      border-bottom-width: 2px;
-      border-radius: 5px;
-      background: #ffffff;
+    #btn-audio .ctl-text::after {
+      content: "";
+      position: absolute;
+      left: -5px;
+      right: -5px;
+      top: -4px;
+      bottom: -4px;
+      pointer-events: none;
+      background-repeat: no-repeat;
+      background-image:
+        linear-gradient(45deg, transparent calc(50% - 0.8px), #dc2626 calc(50% - 0.8px), #dc2626 calc(50% + 0.8px), transparent calc(50% + 0.8px)),
+        linear-gradient(-45deg, transparent calc(50% - 0.8px), #dc2626 calc(50% - 0.8px), #dc2626 calc(50% + 0.8px), transparent calc(50% + 0.8px)),
+        linear-gradient(45deg, transparent calc(50% - 1.9px), rgba(255, 255, 255, 0.92) calc(50% - 1.9px), rgba(255, 255, 255, 0.92) calc(50% + 1.9px), transparent calc(50% + 1.9px)),
+        linear-gradient(-45deg, transparent calc(50% - 1.9px), rgba(255, 255, 255, 0.92) calc(50% - 1.9px), rgba(255, 255, 255, 0.92) calc(50% + 1.9px), transparent calc(50% + 1.9px));
+      /* 平时藏着：右侧整块裁掉 + 略放大，点静音时从左往右扫出来 */
+      clip-path: inset(0 100% 0 0);
+      transform: scale(1.14);
+      opacity: 0.2;
+      transition:
+        clip-path 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 0.16s ease;
     }
-    .hint-sep {
-      width: 3px;
-      height: 3px;
+    #btn-audio.is-off { color: #9aa1ab; }
+    #btn-audio.is-off .ctl-text::after {
+      clip-path: inset(0 0 0 0);
+      transform: scale(1);
+      opacity: 1;
+    }
+
+    /* ---------- 缩放 / 移动手柄 ---------- */
+    .handle {
+      position: absolute;
+      width: 46px;
+      height: 46px;
+      margin: -23px 0 0 -23px;
       border-radius: 50%;
-      background: #d3d8de;
+      z-index: 200;
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .handle-nw { left: 10.67%; top: 10.67%; cursor: nwse-resize; }
+    .handle-ne { left: 89.33%; top: 10.67%; cursor: nesw-resize; }
+    .handle-sw { left: 10.67%; top: 89.33%; cursor: nesw-resize; }
+    .handle-se { left: 89.33%; top: 89.33%; cursor: nwse-resize; }
+    .handle-move {
+      left: 50%;
+      top: 50%;
+      width: 58px;
+      height: 58px;
+      margin: -29px 0 0 -29px;
+      cursor: move;
     }
 
     /* ---------- 设备本体沿用的极少量工具类（已脱离 Tailwind CDN） ---------- */
@@ -245,50 +553,335 @@
     .select-none { user-select: none; -webkit-user-select: none; }
     .pointer-events-none { pointer-events: none; }
 
+    /* ===== 手卷钢琴：硅胶软垫 + 右端控制盒 ===== */
+    .roll-piano {
+      --piano-accent: #eab308;
+      --box-w: 128px;
+      --mat-w: min(792px, calc(100vw - 168px));
+      position: fixed;
+      right: 56px;
+      bottom: 18px;
+      /* 层级：纸张(2) < 钢琴窗(4) < 五度圈(5) < 控制条(10) */
+      z-index: 4;
+      display: flex;
+      align-items: stretch;
+      height: 116px;
+      /* 右端固定：展开/卷起时控制盒原地不动 */
+      transform: translate(var(--piano-x, 0px), var(--piano-y, 0px)) scale(var(--piano-zoom, 1));
+      transform-origin: 100% 100%;
+      pointer-events: none;
+      filter: drop-shadow(0 9px 14px rgba(15, 23, 42, 0.18));
+    }
+
+    /* 软垫：收卷时整体变窄，左端被裁掉（等于卷进去了） */
+    .piano-mat {
+      position: relative;
+      width: var(--mat-w);
+      overflow: hidden;
+      border-radius: 13px 0 0 13px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 22%),
+        linear-gradient(180deg, #23262d, #15171c 62%, #0c0e12);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.14),
+        inset 0 -3px 8px rgba(0, 0, 0, 0.55);
+      transition: width 0.62s cubic-bezier(0.42, 0.02, 0.24, 1);
+      pointer-events: auto;
+    }
+
+    /* 键床：宽度固定、靠右对齐，收卷时被垫子裁切（键不会被压扁） */
+    .piano-roll {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: var(--mat-w);
+      padding: 7px 6px 8px;
+      background: #0b0d10;
+    }
+
+    .piano-white-keys {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(21, minmax(0, 1fr));
+      height: 100%;
+      gap: 1px;
+      overflow: hidden;
+      border-radius: 7px 2px 2px 7px;
+      background: #0b0d10;
+    }
+    .piano-black-keys {
+      position: absolute;
+      inset: 7px 6px 8px;
+      pointer-events: none;
+    }
+
+    .piano-key {
+      position: relative;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      font: inherit;
+      cursor: pointer;
+      touch-action: none;
+    }
+    /* 白键：硅胶质感，键缝是垫子底色印出来的细线 */
+    .piano-key-white {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 4px;
+      border-radius: 1px 1px 4px 4px;
+      background: linear-gradient(180deg, #f7f5f0 0%, #f2f0ea 58%, #e4e1d9 100%);
+      color: #a9a69e;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.07);
+    }
+
+    /* 黑键：印上去的，几乎不浮雕 */
+    .piano-key-black {
+      position: absolute;
+      top: 0;
+      width: 2.9%;
+      height: 58%;
+      transform: translateX(-50%);
+      border-radius: 0 0 3px 3px;
+      background: linear-gradient(180deg, #2b2f37 0%, #171a20 42%, #0c0e12 100%);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+      pointer-events: auto;
+    }
+
+    /* 七音高亮（当前调的音阶） */
+    .piano-key-white.is-scale {
+      background: linear-gradient(180deg, #fff9d8 0%, #fdefb0 55%, #f4e08c 100%);
+      color: #6b5a22;
+    }
+    .piano-key-black.is-scale {
+      background: linear-gradient(180deg, #7a6524 0%, #4f4216 50%, #2f270c 100%);
+    }
+    /* 三和弦高亮（正在播放），蓝色，优先级最高 */
+    .piano-key-white.is-chord {
+      background: linear-gradient(180deg, #eaf7ff 0%, #bfe6ff 55%, #8fd0f5 100%);
+      color: #14506e;
+      box-shadow: inset 0 -3px 0 #75bde8;
+    }
+    .piano-key-black.is-chord {
+      background: linear-gradient(180deg, #7cc4f0 0%, #3f9fd4 50%, #1f6f9e 100%);
+    }
+    .piano-key-white.is-pressed {
+      background: linear-gradient(180deg, #dedbd3 0%, #efeee9 60%, #d3d0c7 100%);
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.18);
+    }
+    .piano-key-black.is-pressed {
+      background: linear-gradient(180deg, #545a66 0%, #23262d 50%, #14171c 100%);
+    }
+
+    /* 卷起来的圆筒：收卷时从右往左长出来，盖住被裁的键 */
+    .piano-cylinder {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 96px;
+      border-radius: 13px 0 0 13px;
+      transform: scaleX(0);
+      transform-origin: 100% 50%;
+      opacity: 0;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 26%),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.045) 0 2px, rgba(0, 0, 0, 0.05) 2px 6px),
+        linear-gradient(180deg, #2d313a 0%, #1a1d24 40%, #0d0f13 82%, #06070a 100%);
+      box-shadow:
+        inset 0 0 18px rgba(0, 0, 0, 0.72),
+        inset 0 1px 0 rgba(255, 255, 255, 0.16);
+      transition: transform 0.62s cubic-bezier(0.42, 0.02, 0.24, 1), opacity 0.22s ease;
+      pointer-events: none;
+    }
+    .roll-piano.is-folded .piano-mat { width: 96px; }
+    .roll-piano.is-folded .piano-cylinder { transform: scaleX(1); opacity: 1; }
+    /* 卷起来以后键都收进卷里了，不该再能按响 */
+    .roll-piano.is-folded .piano-roll,
+    .roll-piano.is-folded .piano-roll .piano-key { pointer-events: none; }
+
+    /* 右端控制盒：抓这里可以整台拖动 */
+    .piano-box {
+      position: relative;
+      flex: none;
+      width: var(--box-w);
+      border-radius: 5px 15px 15px 5px;
+      background:
+        linear-gradient(160deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0) 42%),
+        linear-gradient(170deg, #363b45, #1d2027 55%, #101216);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        inset 0 -2px 5px rgba(0, 0, 0, 0.55),
+        -4px 0 10px rgba(0, 0, 0, 0.35);
+      pointer-events: auto;
+      cursor: grab;
+      touch-action: none;
+    }
+    .piano-box.is-cursor-nwse { cursor: nwse-resize; }
+    .piano-box.is-cursor-nesw { cursor: nesw-resize; }
+    .roll-piano.is-dragging .piano-box,
+    .roll-piano.is-dragging .piano-box.is-cursor-nwse,
+    .roll-piano.is-dragging .piano-box.is-cursor-nesw { cursor: grabbing; }
+
+    .piano-display {
+      position: absolute;
+      left: 13px;
+      right: 13px;
+      top: 11px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      border-radius: 4px;
+      background: #07090c;
+      box-shadow: inset 0 0 9px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      font-size: 7.5px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      color: #4d5561;
+      text-transform: uppercase;
+    }
+    .piano-display b {
+      font-size: 16px;
+      line-height: 1;
+      letter-spacing: 0;
+      color: var(--piano-accent);
+      text-shadow: 0 0 9px color-mix(in srgb, var(--piano-accent) 55%, transparent);
+    }
+
+
+
+    .piano-led {
+      position: absolute;
+      left: 14px;
+      bottom: 13px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--piano-accent);
+      box-shadow: 0 0 8px color-mix(in srgb, var(--piano-accent) 70%, transparent);
+    }
+    .piano-speaker {
+      position: absolute;
+      right: 12px;
+      bottom: 8px;
+      width: 36px;
+      height: 24px;
+      background: radial-gradient(circle, #05070a 1px, transparent 1.4px) 0 0 / 4px 4px;
+      opacity: 0.75;
+      pointer-events: none;
+    }
+
+
+
     @media (max-width: 560px) {
       .stage { gap: 16px; padding: 16px 12px 22px; }
       .scene { max-width: min(84vh, 100%); }
-      .ctl { padding: 0 8px; }
-      .ctl-text { display: none; }
-      .hint { font-size: 12px; gap: 7px; }
+      /* 手机上文字按钮收窄一点，但四个功能都要看得见、点得到 */
+      .dock { gap: 3px; padding: 7px 8px; }
+      .ctl { padding: 0 6px; font-size: 12px; }
+      .swatches { gap: 5px; }
+      .dock-sep { margin: 0 3px; }
+      .roll-piano { --box-w: 112px; --mat-w: min(620px, calc(100vw - 152px)); height: 104px; }
+      .piano-display { top: 9px; height: 26px; }
+      .piano-roll { padding: 6px 5px 7px; }
+      .piano-black-keys { inset: 6px 5px 7px; }
+    }
+    @media (max-width: 380px) {
+      .dock { gap: 2px; padding: 6px 6px; }
+      .ctl { padding: 0 4px; font-size: 11.5px; }
+      .swatches { gap: 4px; }
     }
 
   </style>
 </head>
 <body>
 
+  <!-- 顶部控制条：配色 / 透视 / 翻转 / 声音（可拖动、可缩放） -->
+  <div class="dock" id="dock" role="toolbar" aria-label="外观与声音">
+
+    <div class="swatches" role="group" aria-label="外壳配色">
+      <button type="button" data-color="yellow" class="color-btn is-on" aria-label="经典黄" title="经典黄"></button>
+      <button type="button" data-color="red" class="color-btn" aria-label="复古红" title="复古红"></button>
+      <button type="button" data-color="green" class="color-btn" aria-label="森林绿" title="森林绿"></button>
+      <button type="button" data-color="gray" class="color-btn" aria-label="深空灰" title="深空灰"></button>
+    </div>
+
+    <span class="dock-sep"></span>
+
+    <button type="button" id="btn-xray" class="ctl is-on" title="半透明磨砂面板：可以看到内部完整的五度圈">
+      <span class="ctl-text">半透明</span>
+    </button>
+
+    <button type="button" id="btn-flip" class="ctl" title="翻转正面 / 背面">
+      <span id="flip-label">翻转</span>
+    </button>
+
+    <button type="button" id="btn-audio" class="ctl is-on" title="和弦试听开关">
+      <span id="audio-label" class="ctl-text">声音</span>
+    </button>
+
+    <span class="dock-sep"></span>
+
+    <button type="button" id="btn-reset" class="ctl" title="重置：控制条与五度圈都回到原位原大小">
+      <span class="ctl-text">重置</span>
+    </button>
+
+  </div>
+
   <!-- 主舞台：页面上只保留这台机器 -->
   <main class="stage">
 
-    <!-- 顶部控制条：配色 / 透视 / 翻转 / 声音 -->
-    <div class="dock" role="toolbar" aria-label="外观与声音">
-      <div class="swatches" role="group" aria-label="外壳配色">
-        <button type="button" data-color="yellow" class="color-btn is-on" aria-label="经典黄" title="经典黄"></button>
-        <button type="button" data-color="red" class="color-btn" aria-label="复古红" title="复古红"></button>
-        <button type="button" data-color="green" class="color-btn" aria-label="森林绿" title="森林绿"></button>
-        <button type="button" data-color="gray" class="color-btn" aria-label="深空灰" title="深空灰"></button>
+    <!-- 说明文档：一张实体白纸（在五度圈下层）。单击揉成纸团 / 再单击展开，长按拖动，四角缩放 -->
+    <div class="paper is-collapsed" id="paper">
+      <div class="paper-sheet">
+        <div class="paper-crumple">
+          <div class="paper-content">
+          <h2>使用说明</h2>
+
+          <h3>一、这是什么</h3>
+          <p>五度圈，一个较为基础的、能够迅速帮你找到一个和弦和音阶构成关系的工具。你不必以此为准来约束和弦的创作，但可以以此作为参考来创作，也省去繁琐的记忆。</p>
+
+          <h3>二、这个五度圈怎么用</h3>
+          <p>你把主音调到 G，也就是最上面露出来的那个板块。我用这个做例子。</p>
+          <ol>
+            <li>每个圆孔下方的数字中，黑色强调的那个数字，就是这个调性下的第几级音：此时调性是 G，左边的孔位是 C，下面突出的数字是 4，C 就是 G 调的四音。</li>
+            <li>每个圆孔下方的三个数字，就对应构成这个级别三和弦的三个音：此时调性是 G，左边的孔位是 C，下面的三个数字是 4-6-1，那么 G 大调的四级和弦 C 和弦，其三和弦就由这里的四音、六音、一音（主音）构成，也就是 C、E、G。</li>
+            <li>整个五度圈分上下部分，上半部分代表着该调性下的大和弦，下半部分则代表着小和弦；位于中间的，则是减七和弦。</li>
+            <li>在背面，是一些经典的基础和弦进行，你可以随意尝试，这只是个凑数的功能。</li>
+          </ol>
+
+          <h3>三、这个界面都怎么操作</h3>
+          <p><b>对于五度圈</b>：你可以长按鼠标左键旋转，圆盘就会旋转。当你单击圆盘上的字母时，会自动播放它的三和弦，你可以选择关闭。</p>
+          <p>同时，你也可以长按正中央的圆点来移动，拖住角落的圆点来缩放。</p>
+          <p><b>对于钢琴窗</b>：你可以单击这个小盒子来展开或收起；同样的，你也可以按住角落来缩放，或者按住这个盒子本身来拖动。</p>
+          <p><b>对于本说明书</b>：你都已经展开来了，你自然应该知道怎么打开。你还可以再单击一次来收起。同样的，你也可以缩放和拖动。</p>
+          <p>如果你要重置，那就点重置就可以了。</p>
+          </div>
+        </div>
+      </div>
+        <div class="paper-ball" id="paper-ball" title="单击展开"></div>
+        <div class="paper-handle paper-nw" data-paper="zoom"></div>
+        <div class="paper-handle paper-ne" data-paper="zoom"></div>
+        <div class="paper-handle paper-sw" data-paper="zoom"></div>
+        <div class="paper-handle paper-se" data-paper="zoom"></div>
       </div>
 
-      <span class="dock-sep"></span>
-
-      <button type="button" id="btn-xray" class="ctl is-on" title="半透明磨砂面板：透视内部完整五度圈">
-        <span id="xray-dot" class="dot dot-on"></span><span class="ctl-text">透视</span>
-      </button>
-
-      <button type="button" id="btn-flip" class="ctl ctl-primary" title="翻转正面 / 背面">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
-        <span id="flip-label">查看背面</span>
-      </button>
-
-      <button type="button" id="btn-audio" class="ctl is-on" title="和弦试听开关">
-        <span id="audio-icon">🔊</span><span id="audio-label" class="ctl-text">声音</span>
-      </button>
-    </div>
-
     <!-- 机器本体（正面 / 背面 3D 卡片） -->
-    <div class="scene is-resting">
+    <div class="scene is-resting" id="scene">
+      <!-- 四角：按住拖动 = 等比缩放；中心圆钉：按住拖动 = 整体移动 -->
+      <div class="handle handle-nw" data-drag="zoom"></div>
+      <div class="handle handle-ne" data-drag="zoom"></div>
+      <div class="handle handle-sw" data-drag="zoom"></div>
+      <div class="handle handle-se" data-drag="zoom"></div>
+      <div class="handle handle-move" data-drag="move" title="拖动整体位置"></div>
+
       <div id="device-card" class="device-card">
 
           <!-- ================= 24-LAYER 3D PHYSICAL ACRYLIC & GEAR SANDWICH (Z = -24px to +24px, 3x Thicker!) ================= -->
@@ -428,7 +1021,7 @@
 
                 <g mask="url(#front-plate-mask)">
                   <!-- Connecting circular arc for Major Chords (r=204) -->
-                  <path d="M 119.8,204.3 A 204,204 0 0 1 480.2,204.3" fill="none" stroke="#18181b" stroke-width="2.2" />
+                  <path d="M 139,174.8 A 204,204 0 0 1 461,174.8" fill="none" stroke="#18181b" stroke-width="2.2" />
                   <!-- Diminished 7° indicator arc (r=82) -->
                   <path d="M 231,246 A 82,82 0 0 0 231,354" fill="none" stroke="#18181b" stroke-width="2" />
                   <!-- Minor Chords indicator arc (r=154) -->
@@ -717,15 +1310,28 @@
 
       </div>
 
-    <p class="hint">
-      <span>拖拽转盘切换调性</span>
-      <span class="hint-sep"></span>
-      <span>滚轮 / <kbd>←</kbd><kbd>→</kbd></span>
-      <span class="hint-sep"></span>
-      <span>点击窗口试听和弦</span>
-    </p>
-
   </main>
+
+  <section class="roll-piano is-folded" id="roll-piano" aria-label="手卷钢琴">
+    <!-- 硅胶软垫：收卷时向左缩进圆筒 -->
+    <div class="piano-mat" id="piano-body">
+      <div class="piano-roll" aria-label="三组八度键盘，当前主音以金色高亮">
+        <div class="piano-white-keys" id="piano-white-keys"></div>
+        <div class="piano-black-keys" id="piano-black-keys"></div>
+      </div>
+      <div class="piano-cylinder" aria-hidden="true"></div>
+    </div>
+
+    <!-- 右端控制盒：抓这里拖动整台琴 -->
+    <div class="piano-box" id="piano-box" title="按住拖动整台琴">
+      <span class="piano-display">KEY<b id="piano-root-label">G</b></span>
+
+      <span class="piano-led" aria-hidden="true"></span>
+      <span class="piano-speaker" aria-hidden="true"></span>
+    </div>
+
+
+  </section>
 
   <script>
     /********************************************************************
@@ -939,63 +1545,166 @@
       return 440 * Math.pow(2, (midi - 69) / 12);
     }
 
-    function playSingleNote(midi, delay = 0, duration = 0.9, gainLevel = 0.22) {
+    // ---- 钢琴音色：加法合成 + 琴槌噪声 + 随音高变化的衰减 ----
+    let pianoMaster = null;
+    let hammerBuffer = null;
+
+    function getPianoMaster(ctx) {
+      if (!pianoMaster || pianoMaster._ctx !== ctx) {
+        const comp = ctx.createDynamicsCompressor();
+        comp.threshold.value = -20;
+        comp.knee.value = 26;
+        comp.ratio.value = 3.2;
+        comp.attack.value = 0.004;
+        comp.release.value = 0.22;
+        const out = ctx.createGain();
+        out.gain.value = 0.95;
+        comp.connect(out);
+        out.connect(ctx.destination);
+        comp._ctx = ctx;
+        pianoMaster = comp;
+      }
+      return pianoMaster;
+    }
+
+    // 琴槌那一下的噪声（一次生成，反复用）
+    function getHammerBuffer(ctx) {
+      if (!hammerBuffer || hammerBuffer.sampleRate !== ctx.sampleRate) {
+        const len = Math.floor(ctx.sampleRate * 0.05);
+        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < len; i += 1) {
+          data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 7);
+        }
+        hammerBuffer = buf;
+      }
+      return hammerBuffer;
+    }
+
+    /**
+     * 弹一个音。
+     * 1）8 个谐波按 1/n^1.25 衰减，高次谐波衰减更快、并带轻微非谐性；
+     * 2）一个随时间关闭的低通模拟钢琴"音头亮、尾巴暗"；
+     * 3）一小段带通噪声当作琴槌敲击；
+     * 4）低音更长、高音更短。
+     */
+    function playSingleNote(midi, delay = 0, duration = 1.1, gainLevel = 0.24) {
       if (!state.audioEnabled) return;
       try {
         const ctx = getAudioCtx();
+        const master = getPianoMaster(ctx);
         const now = ctx.currentTime + delay;
+        const hz = midiToFreq(midi);
 
-        const osc1 = ctx.createOscillator();
-        const osc2 = ctx.createOscillator();
-        const gain = ctx.createGain();
-        const filter = ctx.createBiquadFilter();
+        // 尾音长度：低音更久，高音更短
+        const body = duration * (midi < 48 ? 1.55 : midi < 60 ? 1.15 : 1) * (midi > 72 ? 0.72 : 1);
 
-        osc1.type = "triangle";
-        osc2.type = "sine";
-        const freq = midiToFreq(midi);
-        osc1.frequency.setValueAtTime(freq, now);
-        osc2.frequency.setValueAtTime(freq * 2, now);
+        // 音色整体：音头亮，随后迅速变暗
+        const tone = ctx.createBiquadFilter();
+        tone.type = "lowpass";
+        tone.Q.value = 0.55;
+        tone.frequency.setValueAtTime(Math.min(11000, hz * 10 + 1600), now);
+        tone.frequency.exponentialRampToValueAtTime(Math.max(650, hz * 2.1), now + body * 0.85);
+        tone.connect(master);
 
-        filter.type = "lowpass";
-        filter.frequency.setValueAtTime(2400, now);
-        filter.frequency.exponentialRampToValueAtTime(600, now + duration);
+        const B = 0.00034;   // 琴弦非谐性
+        const count = Math.max(3, Math.min(12, Math.round(9500 / hz)));
 
-        gain.gain.setValueAtTime(0.0001, now);
-        gain.gain.linearRampToValueAtTime(gainLevel, now + 0.018);
-        gain.gain.exponentialRampToValueAtTime(0.0008, now + duration);
+        for (let i = 0; i < count; i += 1) {
+          const h = i + 1;
+          const osc = ctx.createOscillator();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(hz * h * Math.sqrt(1 + B * h * h), now);
 
-        const osc2Gain = ctx.createGain();
-        osc2Gain.gain.setValueAtTime(0.25, now);
+          const g = ctx.createGain();
+          const peak = gainLevel * Math.pow(1 / h, 1.25) * (h === 1 ? 1 : 0.92);
+          const decay = body / (1 + 0.34 * (h - 1));
+          const attack = 0.003 + h * 0.0015;
 
-        osc1.connect(filter);
-        osc2.connect(osc2Gain);
-        osc2Gain.connect(filter);
-        filter.connect(gain);
-        gain.connect(ctx.destination);
+          const tail = Math.max(attack + 0.05, decay);
+          g.gain.setValueAtTime(0.0001, now);
+          g.gain.exponentialRampToValueAtTime(Math.max(0.0003, peak), now + attack);
+          // 音头后先快速掉一截（钢琴的"敲击感"），再慢慢衰减
+          g.gain.exponentialRampToValueAtTime(Math.max(0.0004, peak * 0.34), now + Math.min(tail * 0.35, attack + 0.1));
+          g.gain.exponentialRampToValueAtTime(0.0001, now + tail);
 
-        osc1.start(now);
-        osc2.start(now);
-        osc1.stop(now + duration + 0.05);
-        osc2.stop(now + duration + 0.05);
+          osc.connect(g);
+          g.connect(tone);
+          osc.start(now);
+          osc.stop(now + decay + 0.08);
+        }
+
+        // 琴槌
+        const noise = ctx.createBufferSource();
+        noise.buffer = getHammerBuffer(ctx);
+        const bp = ctx.createBiquadFilter();
+        bp.type = "bandpass";
+        bp.frequency.value = Math.min(5200, hz * 5.5 + 900);
+        bp.Q.value = 1.2;
+        const ng = ctx.createGain();
+        ng.gain.setValueAtTime(Math.max(0.001, gainLevel * 0.32), now);
+        ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.055);
+        noise.connect(bp);
+        bp.connect(ng);
+        ng.connect(master);
+        noise.start(now);
+        noise.stop(now + 0.07);
       } catch (e) {}
     }
 
-    function playMechanicalClick() {
+    /**
+     * 齿轮"嗒"：手表擒纵那种清脆短促的金属咔哒。
+     * 由三部分组成——高频噪声瞬态（金属齿）+ 一个很短的高频"叮" + 极少量机芯厚度。
+     * 每次触发有轻微随机失谐，连续转盘时不会听起来像同一个采样反复播放。
+     */
+    function playMechanicalClick(intensity = 1) {
       if (!state.audioEnabled) return;
       try {
         const ctx = getAudioCtx();
+        const master = getPianoMaster(ctx);
         const now = ctx.currentTime;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(190, now);
-        osc.frequency.exponentialRampToValueAtTime(55, now + 0.025);
-        gain.gain.setValueAtTime(0.18, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.025);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.03);
+        const level = 0.3 * intensity;
+        const jitter = 1 + (Math.random() - 0.5) * 0.07;
+
+        // 1) 金属齿的瞬态：一段短噪声过窄带通
+        const noise = ctx.createBufferSource();
+        noise.buffer = getHammerBuffer(ctx);
+        const bp = ctx.createBiquadFilter();
+        bp.type = "bandpass";
+        bp.frequency.setValueAtTime(3050 * jitter, now);
+        bp.Q.value = 6;
+        const ng = ctx.createGain();
+        ng.gain.setValueAtTime(level, now);
+        ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.02);
+        noise.connect(bp);
+        bp.connect(ng);
+        ng.connect(master);
+        noise.start(now);
+        noise.stop(now + 0.028);
+
+        // 2) 清脆的"叮"
+        const ping = ctx.createOscillator();
+        ping.type = "sine";
+        ping.frequency.setValueAtTime(3920 * jitter, now);
+        const pg = ctx.createGain();
+        pg.gain.setValueAtTime(level * 0.5, now);
+        pg.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
+        ping.connect(pg);
+        pg.connect(master);
+        ping.start(now);
+        ping.stop(now + 0.038);
+
+        // 3) 一点点机芯厚度（不要多，多了就变闷）
+        const body = ctx.createOscillator();
+        body.type = "sine";
+        body.frequency.setValueAtTime(196 * jitter, now);
+        const bg = ctx.createGain();
+        bg.gain.setValueAtTime(level * 0.14, now);
+        bg.gain.exponentialRampToValueAtTime(0.0001, now + 0.018);
+        body.connect(bg);
+        bg.connect(master);
+        body.start(now);
+        body.stop(now + 0.024);
       } catch (e) {}
     }
 
@@ -1029,6 +1738,7 @@
       playSingleNote(triad.midis[0], 0.02, 1.0, 0.2);
       playSingleNote(triad.midis[1], 0.055, 1.0, 0.18);
       playSingleNote(triad.midis[2], 0.09, 1.05, 0.18);
+      flashPianoChord(triad.midis.map((m) => ((m % 12) + 12) % 12));
     }
 
     /********************************************************************
@@ -1253,6 +1963,8 @@
       document.getElementById("wheel-front-sigs").setAttribute("transform", rotStr);
       document.getElementById("wheel-front-dims").setAttribute("transform", rotStr);
 
+      syncPianoRoot();
+
       const backRotStr = `rotate(${-state.wheelAngle} 300 300)`;
       document.getElementById("wheel-back-group").setAttribute("transform", backRotStr);
       document.getElementById("wheel-back-progs-rot").setAttribute("transform", backRotStr);
@@ -1402,6 +2114,7 @@
     function applyColorTheme(themeKey) {
       state.colorTheme = themeKey;
       const theme = COLOR_THEMES[themeKey] || COLOR_THEMES.yellow;
+      document.getElementById("roll-piano")?.style.setProperty("--piano-accent", theme.plate);
       document.getElementById("front-plate-fill").setAttribute("fill", theme.plate);
       document.getElementById("back-plate-fill").setAttribute("fill", theme.plate);
 
@@ -1414,10 +2127,672 @@
       });
     }
 
+    /********************************************************************
+     * 9. VIEW TRANSFORM：四角等比缩放 + 中心整体拖动
+     ********************************************************************/
+    const VIEW_MIN_ZOOM = 0.4;
+    let viewZoom = 1;
+    let viewX = 0;
+    let viewY = 0;
+
+    function applyViewTransform() {
+      const sceneEl = document.getElementById("scene");
+      if (!sceneEl) return;
+      // 未缩放未平移时不留 transform，保持静止态的平面绘制（清晰度相关）
+      if (viewZoom === 1 && viewX === 0 && viewY === 0) {
+        sceneEl.style.transform = "";
+      } else {
+        sceneEl.style.transform = `translate(${viewX}px, ${viewY}px) scale(${viewZoom})`;
+      }
+    }
+
+    function initViewControls() {
+      const sceneEl = document.getElementById("scene");
+      if (!sceneEl) return;
+
+      sceneEl.querySelectorAll(".handle").forEach((handle) => {
+        handle.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          e.stopPropagation();
+
+          const mode = handle.dataset.drag;
+          const rect = sceneEl.getBoundingClientRect();
+          const centerX = rect.left + rect.width / 2;
+          const centerY = rect.top + rect.height / 2;
+          const startDistance = Math.max(1, Math.hypot(e.clientX - centerX, e.clientY - centerY));
+          const startZoom = viewZoom;
+          const startX = e.clientX;
+          const startY = e.clientY;
+          const startPanX = viewX;
+          const startPanY = viewY;
+
+          if (handle.setPointerCapture) {
+            try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+          }
+
+          const onMove = (ev) => {
+            if (mode === "zoom") {
+              // 等比缩放：指针离中心越远越大，缩小到 40% 为止，放大不设上限
+              const distance = Math.hypot(ev.clientX - centerX, ev.clientY - centerY);
+              viewZoom = Math.max(VIEW_MIN_ZOOM, startZoom * (distance / startDistance));
+            } else {
+              viewX = startPanX + (ev.clientX - startX);
+              viewY = startPanY + (ev.clientY - startY);
+            }
+            applyViewTransform();
+          };
+          const onUp = () => {
+            handle.removeEventListener("pointermove", onMove);
+            handle.removeEventListener("pointerup", onUp);
+            handle.removeEventListener("pointercancel", onUp);
+          };
+
+          handle.addEventListener("pointermove", onMove);
+          handle.addEventListener("pointerup", onUp);
+          handle.addEventListener("pointercancel", onUp);
+        });
+      });
+    }
+
+    /********************************************************************
+     * 10. DOCK：控制条的拖动 / 等比缩放 / 不越界
+     ********************************************************************/
+    const DOCK_MIN_ZOOM = 0.35;
+    let dockZoom = 1;
+    let dockX = 0;
+    let dockY = 0;
+
+    function applyDockTransform() {
+      const dock = document.getElementById("dock");
+      if (!dock) return;
+      if (dockZoom === 1 && dockX === 0 && dockY === 0) {
+        dock.style.transform = "";
+      } else {
+        dock.style.transform = `translate(${dockX}px, ${dockY}px) scale(${dockZoom})`;
+      }
+    }
+
+    // 控制条整体必须留在页面内（留 12px 余量，右下角的缩放手柄才不会贴边被切）
+    function clampDock() {
+      const dock = document.getElementById("dock");
+      if (!dock) return;
+      const r = dock.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const margin = 12;
+      let dx = 0;
+      let dy = 0;
+
+      if (r.width <= vw - margin * 2) {
+        if (r.left < margin) dx = margin - r.left;
+        else if (r.right > vw - margin) dx = vw - margin - r.right;
+      } else {
+        dx = margin - r.left;
+      }
+      if (r.height <= vh - margin * 2) {
+        if (r.top < margin) dy = margin - r.top;
+        else if (r.bottom > vh - margin) dy = vh - margin - r.bottom;
+      } else {
+        dy = margin - r.top;
+      }
+
+      if (dx || dy) {
+        dockX += dx;
+        dockY += dy;
+        applyDockTransform();
+      }
+    }
+
+    /**
+     * 指针移到"可以缩放的角"时换成双向箭头，其他位置保持手掌——和纸张的四个角一致。
+     * 角的方向按最近的那个角算：左上/右下 → nwse，右上/左下 → nesw。
+     */
+    function initCornerCursor(el, cornerPx, isBusy) {
+      if (!el) return;
+      const clear = () => el.classList.remove("is-cursor-nwse", "is-cursor-nesw");
+      document.addEventListener("pointermove", (e) => {
+        if (isBusy && isBusy()) { clear(); return; }
+        const r = el.getBoundingClientRect();
+        const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+        const nearCorner =
+          (e.clientX - r.left < cornerPx || r.right - e.clientX < cornerPx) &&
+          (e.clientY - r.top < cornerPx || r.bottom - e.clientY < cornerPx);
+        if (!inside || !nearCorner) { clear(); return; }
+        const leftSide = (e.clientX - r.left) < (r.right - e.clientX);
+        const topSide = (e.clientY - r.top) < (r.bottom - e.clientY);
+        const nwse = leftSide === topSide;
+        el.classList.toggle("is-cursor-nwse", nwse);
+        el.classList.toggle("is-cursor-nesw", !nwse);
+      }, { passive: true });
+      document.addEventListener("pointerleave", clear);
+    }
+
+    // 控制条：长按空白处拖动；长按四角边缘缩放（不再有可见抓手/圆点）
+    function initDockControls() {
+      const dock = document.getElementById("dock");
+      if (!dock) return;
+
+      const CORNER = 26;      // 四角判定半径
+      const HOLD = 320;       // 长按多久开始拖
+      let pressTimer = 0;
+      let pressing = false;
+      let dragging = false;
+      let mode = "move";
+      let startX = 0;
+      let startY = 0;
+      let baseX = 0;
+      let baseY = 0;
+      let centerX = 0;
+      let centerY = 0;
+      let startDistance = 1;
+      let startZoom = 1;
+
+      const stopPress = () => {
+        clearTimeout(pressTimer);
+        pressTimer = 0;
+        pressing = false;
+        if (dragging) {
+          dragging = false;
+          dock.classList.remove("is-dragging");
+          return true;
+        }
+        return false;
+      };
+
+      const beginDrag = () => {
+        dragging = true;
+        dock.classList.add("is-dragging");
+      };
+
+      const onMove = (e) => {
+        if (!pressing) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        if (!dragging) {
+          if (Math.hypot(dx, dy) <= 6) return;
+          clearTimeout(pressTimer);
+          pressTimer = 0;
+          beginDrag();
+        }
+        if (mode === "zoom") {
+          const distance = Math.hypot(e.clientX - centerX, e.clientY - centerY);
+          dockZoom = Math.max(DOCK_MIN_ZOOM, startZoom * (distance / startDistance));
+        } else {
+          dockX = baseX + dx;
+          dockY = baseY + dy;
+        }
+        applyDockTransform();
+        clampDock();
+      };
+
+      const onUp = () => {
+        if (!pressing) return;
+        stopPress();
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+      };
+
+      document.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        const rect = dock.getBoundingClientRect();
+        const PAD = 10;   // 贴着边缘外一点也算抓到了
+        const inside = e.clientX >= rect.left && e.clientX <= rect.right &&
+                       e.clientY >= rect.top && e.clientY <= rect.bottom;
+        const inGrab = e.clientX >= rect.left - PAD && e.clientX <= rect.right + PAD &&
+                       e.clientY >= rect.top - PAD && e.clientY <= rect.bottom + PAD;
+        if (!inGrab) return;
+        // 按在按钮上就是点按钮
+        if (inside && e.target.closest("button")) return;
+        const nearCorner =
+          (e.clientX - rect.left < CORNER || rect.right - e.clientX < CORNER) &&
+          (e.clientY - rect.top < CORNER || rect.bottom - e.clientY < CORNER);
+
+        e.preventDefault();
+        pressing = true;
+        dragging = false;
+        mode = nearCorner ? "zoom" : "move";
+        startX = e.clientX;
+        startY = e.clientY;
+        baseX = dockX;
+        baseY = dockY;
+        centerX = rect.left + rect.width / 2;
+        centerY = rect.top + rect.height / 2;
+        startDistance = Math.max(1, Math.hypot(e.clientX - centerX, e.clientY - centerY));
+        startZoom = dockZoom;
+
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+        window.addEventListener("pointercancel", onUp);
+
+        clearTimeout(pressTimer);
+        pressTimer = setTimeout(() => {
+          if (!pressing) return;
+          beginDrag();
+        }, HOLD);
+      });
+
+      window.addEventListener("resize", clampDock);
+      initCornerCursor(dock, CORNER, () => dragging);
+    }
+
+    // 一键归位：五度圈、控制条、说明文档都回到原位原大小
+    // 重置：五度圈 / 纸张 / 钢琴都平滑回到原位原大，控制条保持用户摆放的样子
+    let resetAnimTimer = 0;
+    function resetLayout() {
+      const sceneEl = document.getElementById("scene");
+      const paperEl = document.getElementById("paper");
+      const pianoEl = document.getElementById("roll-piano");
+      const animated = [sceneEl, paperEl, pianoEl].filter(Boolean);
+      animated.forEach((el) => el.classList.add("is-resetting"));
+
+      // 用显式的单位值作目标，保证能从当前值插值过去（而不是跳到 none）
+      viewZoom = 1;
+      viewX = 0;
+      viewY = 0;
+      if (sceneEl) sceneEl.style.transform = "translate(0px, 0px) scale(1)";
+
+      paperZoom = 1;
+      paperX = 0;
+      paperY = 0;
+      if (paperEl) {
+        paperEl.style.transform = "translate(0px, 0px) scale(1)";
+        paperEl.classList.add("is-collapsed");
+      }
+
+      pianoZoom = 1;
+      pianoPanX = 0;
+      pianoPanY = 0;
+      if (pianoEl) {
+        pianoEl.style.setProperty("--piano-zoom", "1");
+        pianoEl.style.setProperty("--piano-x", "0px");
+        pianoEl.style.setProperty("--piano-y", "0px");
+        pianoEl.classList.add("is-folded");
+      }
+
+      // 过渡结束后清掉内联 transform，回到"静止时不留 transform"的清晰度处理
+      clearTimeout(resetAnimTimer);
+      resetAnimTimer = setTimeout(() => {
+        animated.forEach((el) => el.classList.remove("is-resetting"));
+        applyViewTransform();
+        applyPaperTransform();
+        applyPianoZoom();
+      }, 560);
+    }
+
+    // 重置动画还在跑的时候用户就上手拖，就直接结束动画，免得拖起来发涩
+    document.addEventListener("pointerdown", () => {
+      if (!resetAnimTimer) return;
+      clearTimeout(resetAnimTimer);
+      resetAnimTimer = 0;
+      document.querySelectorAll(".is-resetting").forEach((el) => el.classList.remove("is-resetting"));
+    }, true);
+
+    /********************************************************************
+     * 12. ROLL PIANO：可收卷 / 展开 / 缩放，并跟随当前主音高亮
+     ********************************************************************/
+    let pianoZoom = 1;
+    let pianoPanX = 0;
+    let pianoPanY = 0;
+    const PIANO_DISPLAY_OCTAVE = '4';
+    const PIANO_LONG_PRESS = 320;
+    const PIANO_MIN_ZOOM = 0.4;
+    const PIANO_MAX_ZOOM = 2.4;
+    const PIANO_WHITE_PITCHES = [0, 2, 4, 5, 7, 9, 11];
+    const PIANO_BLACK_AFTER = [0, 1, 3, 4, 5];
+    const NOTE_PITCH_CLASS = { C: 0, "C#": 1, Db: 1, D: 2, "D#": 3, Eb: 3, E: 4, F: 5, "F#": 6, Gb: 6, G: 7, "G#": 8, Ab: 8, A: 9, "A#": 10, Bb: 10, B: 11 };
+
+    function applyPianoZoom() {
+      const piano = document.getElementById("roll-piano");
+      if (!piano) return;
+      piano.style.setProperty("--piano-zoom", pianoZoom.toFixed(2));
+      piano.style.setProperty("--piano-x", `${Math.round(pianoPanX)}px`);
+      piano.style.setProperty("--piano-y", `${Math.round(pianoPanY)}px`);
+    }
+
+    function syncPianoRoot() {
+      const piano = document.getElementById("roll-piano");
+      const key = WHEEL_KEYS[state.keyIndex];
+      if (!piano || !key) return;
+      const scalePcs = key.scale.map((n) => NOTE_PITCH_CLASS[n]);
+      document.getElementById("piano-root-label").textContent = formatPrettyNote(key.majorDisplay);
+      // 只在中间那个八度（C4–B4）里点亮当前调的七个音，避免整台琴都亮
+      piano.querySelectorAll("[data-pitch-class]").forEach((note) => {
+        const inDisplayOctave = note.dataset.octave === PIANO_DISPLAY_OCTAVE;
+        note.classList.toggle("is-scale", inDisplayOctave && scalePcs.includes(Number(note.dataset.pitchClass)));
+      });
+    }
+
+    // 播放三和弦：先撤掉七音黄，只把这一八度里的三个音点亮成蓝色；结束后恢复七音
+    let pianoChordTimer = 0;
+    function flashPianoChord(pitchClasses) {
+      const piano = document.getElementById("roll-piano");
+      if (!piano) return;
+      piano.querySelectorAll(".is-scale").forEach((note) => note.classList.remove("is-scale"));
+      piano.querySelectorAll(".is-chord").forEach((note) => note.classList.remove("is-chord"));
+      piano.querySelectorAll("[data-pitch-class]").forEach((note) => {
+        if (note.dataset.octave !== PIANO_DISPLAY_OCTAVE) return;
+        if (pitchClasses.includes(Number(note.dataset.pitchClass))) note.classList.add("is-chord");
+      });
+      clearTimeout(pianoChordTimer);
+      pianoChordTimer = setTimeout(() => {
+        piano.querySelectorAll(".is-chord").forEach((note) => note.classList.remove("is-chord"));
+        syncPianoRoot();
+      }, 1150);
+    }
+
+    function initRollPiano() {
+      const whites = document.getElementById("piano-white-keys");
+      const blacks = document.getElementById("piano-black-keys");
+      if (!whites || !blacks) return;
+      const noteNames = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+      let whiteIndex = 0;
+      for (let octave = 3; octave <= 5; octave += 1) {
+        PIANO_WHITE_PITCHES.forEach((pitchClass, position) => {
+          const note = document.createElement("span");
+          note.className = "piano-key piano-key-white";
+          note.dataset.pitchClass = String(pitchClass);
+          note.dataset.midi = String((octave + 1) * 12 + pitchClass);
+          note.dataset.octave = String(octave);
+          note.setAttribute("aria-label", `${noteNames[pitchClass]}${octave}`);
+          if (pitchClass === 0) note.textContent = `C${octave}`;
+          whites.appendChild(note);
+
+          if (position < PIANO_WHITE_PITCHES.length - 1 && PIANO_BLACK_AFTER.includes(position)) {
+            const blackPitch = pitchClass + 1;
+            const black = document.createElement("span");
+            black.className = "piano-key piano-key-black";
+            black.dataset.pitchClass = String(blackPitch);
+            black.dataset.midi = String((octave + 1) * 12 + blackPitch);
+            black.dataset.octave = String(octave);
+            black.setAttribute("aria-label", `${noteNames[blackPitch]}${octave}`);
+            black.style.left = `${((whiteIndex + 1) / 21) * 100}%`;
+            blacks.appendChild(black);
+          }
+          whiteIndex += 1;
+        });
+      }
+
+      const piano = document.getElementById("roll-piano");
+
+      // 控制盒：单击 = 卷起 / 展开；长按盒身 = 移动整台琴；长按盒角 = 缩放
+      const boxEl = piano.querySelector(".piano-box");
+      if (boxEl) {
+        const CORNER = 26;
+        let pressTimer = 0;
+        let pressing = false;
+        let dragging = false;
+        let mode = "move";
+        let startX = 0;
+        let startY = 0;
+        let baseX = 0;
+        let baseY = 0;
+        let anchorX = 0;
+        let anchorY = 0;
+        let startDistance = 1;
+        let startZoom = 1;
+
+        const stopPress = () => {
+          clearTimeout(pressTimer);
+          pressTimer = 0;
+          pressing = false;
+          if (dragging) {
+            dragging = false;
+            piano.classList.remove("is-dragging");
+            return true;
+          }
+          return false;
+        };
+
+        boxEl.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          const r = boxEl.getBoundingClientRect();
+          const nearCorner =
+            (e.clientX - r.left < CORNER || r.right - e.clientX < CORNER) &&
+            (e.clientY - r.top < CORNER || r.bottom - e.clientY < CORNER);
+          pressing = true;
+          dragging = false;
+          mode = nearCorner ? "zoom" : "move";
+          startX = e.clientX;
+          startY = e.clientY;
+          baseX = pianoPanX;
+          baseY = pianoPanY;
+          // 缩放锚点 = 控制盒右下角（也是 transform-origin）
+          anchorX = r.right;
+          anchorY = r.bottom;
+          startDistance = Math.max(46, Math.hypot(e.clientX - anchorX, e.clientY - anchorY));
+          startZoom = pianoZoom;
+          if (boxEl.setPointerCapture) {
+            try { boxEl.setPointerCapture(e.pointerId); } catch (err) {}
+          }
+          clearTimeout(pressTimer);
+          pressTimer = setTimeout(() => {
+            if (!pressing) return;
+            dragging = true;
+            piano.classList.add("is-dragging");
+          }, PIANO_LONG_PRESS);
+        });
+
+        boxEl.addEventListener("pointermove", (e) => {
+          if (!pressing) return;
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+          if (!dragging) {
+            if (Math.hypot(dx, dy) <= 6) return;
+            clearTimeout(pressTimer);
+            pressTimer = 0;
+            dragging = true;
+            piano.classList.add("is-dragging");
+          }
+          if (mode === "zoom") {
+            const distance = Math.hypot(e.clientX - anchorX, e.clientY - anchorY);
+            pianoZoom = Math.max(PIANO_MIN_ZOOM, Math.min(PIANO_MAX_ZOOM, startZoom * distance / startDistance));
+          } else {
+            pianoPanX = baseX + dx;
+            pianoPanY = baseY + dy;
+          }
+          applyPianoZoom();
+        });
+
+        boxEl.addEventListener("pointerup", () => {
+          if (!pressing) return;
+          const wasDragging = stopPress();
+          if (!wasDragging && mode !== "zoom") piano.classList.toggle("is-folded");
+        });
+        boxEl.addEventListener("pointercancel", () => { stopPress(); });
+
+        // 盒角显示缩放光标
+        initCornerCursor(boxEl, CORNER, () => dragging);
+      }
+
+      // 弹奏：按下发声；按住拖动可以滑奏
+      let pressedKey = null;
+      const releasePressedKey = () => {
+        if (pressedKey) pressedKey.classList.remove("is-pressed");
+        pressedKey = null;
+      };
+      const pressKey = (el) => {
+        if (!el || el === pressedKey || !el.dataset.midi) return;
+        releasePressedKey();
+        pressedKey = el;
+        el.classList.add("is-pressed");
+        playSingleNote(Number(el.dataset.midi), 0, 0.9, 0.26);
+      };
+      const roll = piano.querySelector(".piano-roll");
+      roll.addEventListener("pointerdown", (e) => {
+        const key = e.target.closest(".piano-key");
+        if (!key) return;
+        e.preventDefault();
+        if (roll.setPointerCapture) {
+          try { roll.setPointerCapture(e.pointerId); } catch (err) {}
+        }
+        pressKey(key);
+      });
+      roll.addEventListener("pointermove", (e) => {
+        if (!pressedKey) return;
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const key = el && el.closest ? el.closest(".piano-key") : null;
+        if (key) pressKey(key);
+      });
+      roll.addEventListener("pointerup", releasePressedKey);
+      roll.addEventListener("pointercancel", releasePressedKey);
+      roll.addEventListener("pointerleave", releasePressedKey);
+
+
+      syncPianoRoot();
+    }
+
+    /********************************************************************
+     * 11. PAPER：说明文档白纸（单击收起 / 长按拖动 / 四角缩放）
+     ********************************************************************/
+    const PAPER_MIN_ZOOM = 0.35;
+    const PAPER_LONG_PRESS = 380;
+    let paperZoom = 1;
+    let paperX = 0;
+    let paperY = 0;
+
+    function applyPaperTransform() {
+      const paper = document.getElementById("paper");
+      if (!paper) return;
+      if (paperZoom === 1 && paperX === 0 && paperY === 0) {
+        paper.style.transform = "";
+      } else {
+        paper.style.transform = `translate(${paperX}px, ${paperY}px) scale(${paperZoom})`;
+      }
+    }
+
+    function togglePaper() {
+      const paper = document.getElementById("paper");
+      if (!paper) return;
+      // 纸和纸团都在同一个容器里，容器尺寸不变，所以只是切换类名
+      paper.classList.toggle("is-collapsed");
+    }
+
+    function initPaper() {
+      const paper = document.getElementById("paper");
+      if (!paper) return;
+
+      // 四角：等比缩放
+      paper.querySelectorAll("[data-paper]").forEach((handle) => {
+        handle.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          e.stopPropagation();
+
+          const rect = paper.getBoundingClientRect();
+          const centerX = rect.left + rect.width / 2;
+          const centerY = rect.top + rect.height / 2;
+          const startDistance = Math.max(1, Math.hypot(e.clientX - centerX, e.clientY - centerY));
+          const startZoom = paperZoom;
+
+          if (handle.setPointerCapture) {
+            try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+          }
+
+          const onMove = (ev) => {
+            const distance = Math.hypot(ev.clientX - centerX, ev.clientY - centerY);
+            paperZoom = Math.max(PAPER_MIN_ZOOM, startZoom * (distance / startDistance));
+            applyPaperTransform();
+          };
+          const onUp = () => {
+            handle.removeEventListener("pointermove", onMove);
+            handle.removeEventListener("pointerup", onUp);
+            handle.removeEventListener("pointercancel", onUp);
+          };
+
+          handle.addEventListener("pointermove", onMove);
+          handle.addEventListener("pointerup", onUp);
+          handle.addEventListener("pointercancel", onUp);
+        });
+      });
+
+      // 纸和纸团：长按拖动；没拖动就是单击 → 揉成纸团 / 展开
+      let pressTimer = 0;
+      let pressing = false;
+      let dragging = false;
+      let startX = 0;
+      let startY = 0;
+      let startPanX = 0;
+      let startPanY = 0;
+
+      const stopPress = () => {
+        clearTimeout(pressTimer);
+        pressTimer = 0;
+        pressing = false;
+        if (dragging) {
+          dragging = false;
+          paper.classList.remove("is-dragging");
+          return true;
+        }
+        return false;
+      };
+
+      const onPressStart = (e) => {
+        if (e.button !== 0) return;
+        if (e.target.closest(".paper-handle")) return;
+        e.preventDefault();
+        pressing = true;
+        dragging = false;
+        startX = e.clientX;
+        startY = e.clientY;
+        startPanX = paperX;
+        startPanY = paperY;
+        const target = e.currentTarget;
+        if (target.setPointerCapture) {
+          try { target.setPointerCapture(e.pointerId); } catch (err) {}
+        }
+        clearTimeout(pressTimer);
+        pressTimer = setTimeout(() => {
+          if (!pressing) return;
+          dragging = true;
+          paper.classList.add("is-dragging");
+        }, PAPER_LONG_PRESS);
+      };
+
+      const onPressMove = (e) => {
+        if (!pressing) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        if (!dragging) {
+          if (Math.hypot(dx, dy) <= 6) return;
+          // 还没长按就动了：直接进入拖动，不用等
+          clearTimeout(pressTimer);
+          pressTimer = 0;
+          dragging = true;
+          paper.classList.add("is-dragging");
+        }
+        paperX = startPanX + dx;
+        paperY = startPanY + dy;
+        applyPaperTransform();
+      };
+
+      const finishPress = () => {
+        if (!pressing) return;
+        const wasDragging = stopPress();
+        if (!wasDragging) togglePaper();
+      };
+
+      [".paper-sheet", ".paper-ball"].forEach((sel) => {
+        const el = paper.querySelector(sel);
+        if (!el) return;
+        el.addEventListener("pointerdown", onPressStart);
+        el.addEventListener("pointermove", onPressMove);
+        el.addEventListener("pointerup", finishPress);
+        el.addEventListener("pointercancel", () => { stopPress(); });
+      });
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
       init3DThicknessLayers();
       initWheelSvg();
       initWheelDrag();
+      initViewControls();
+      initDockControls();
+      initPaper();
+      initRollPiano();
+      document.getElementById("btn-reset").addEventListener("click", resetLayout);
 
       // 默认停在 Key of G（与实体产品图示一致），静默进入
       selectKeyByIndex(1, false);
@@ -1457,7 +2832,6 @@
         document.getElementById("front-plate-fill").setAttribute("opacity", state.xrayTranslucent ? "0.91" : "1");
         document.getElementById("back-plate-fill").setAttribute("opacity", state.xrayTranslucent ? "0.92" : "1");
         document.getElementById("ghost-neighbors").setAttribute("opacity", state.xrayTranslucent ? "0.38" : "0");
-        document.getElementById("xray-dot").classList.toggle("dot-on", state.xrayTranslucent);
       });
 
       // 正反面翻转
@@ -1474,15 +2848,12 @@
         scene.classList.remove("is-resting"); // 翻转期间恢复真 3D
         void card.offsetWidth;
         card.classList.toggle("is-flipped", state.isFlipped);
-        document.getElementById("flip-label").textContent = state.isFlipped ? "查看正面" : "查看背面";
       });
 
       // 声音开关
       const audioBtn = document.getElementById("btn-audio");
       audioBtn.addEventListener("click", () => {
         state.audioEnabled = !state.audioEnabled;
-        document.getElementById("audio-icon").textContent = state.audioEnabled ? "🔊" : "🔇";
-        document.getElementById("audio-label").textContent = state.audioEnabled ? "声音" : "静音";
         audioBtn.classList.toggle("is-off", !state.audioEnabled);
       });
     });
