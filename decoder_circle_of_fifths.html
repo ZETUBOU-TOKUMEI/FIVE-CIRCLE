@@ -92,8 +92,11 @@
 
     /* Interactive hotspots */
     .chord-hotspot {
-      cursor: pointer;
+      cursor: grab;
       transition: filter 0.15s ease, transform 0.15s ease;
+    }
+    .chord-hotspot:active {
+      cursor: grabbing;
     }
     .chord-hotspot:hover {
       filter: brightness(1.2) drop-shadow(0 0 8px rgba(250, 204, 21, 0.65));
@@ -152,92 +155,84 @@
       pointer-events: none;   /* 只有纸本身和纸团可点，空白处不挡下层 */
     }
 
-    /* 纸：微微歪一点，像随手放在桌上
-       外层只负责投影和整体形变，裁剪（揉皱轮廓）放到内层，否则 box-shadow 会被一起裁掉 */
+    /* 展开态纸张外层：承载真实桌面阴影与分步揉纸形变 */
     .paper-sheet {
       position: absolute;
       inset: 0;
       border-radius: 2px;
-      box-shadow:
-        0 0 0 1px rgba(110, 100, 82, 0.12),
-        0 1px 2px rgba(15, 23, 42, 0.1),
-        0 5px 12px -5px rgba(15, 23, 42, 0.22),
-        0 20px 38px -22px rgba(15, 23, 42, 0.5),
-        0 48px 80px -60px rgba(15, 23, 42, 0.45);
+      filter:
+        drop-shadow(0 2px 4px rgba(15, 23, 42, 0.10))
+        drop-shadow(0 14px 28px rgba(15, 23, 42, 0.22))
+        drop-shadow(0 32px 54px rgba(15, 23, 42, 0.18));
       transform: rotate(-0.7deg);
       transform-origin: 50% 50%;
-      transition:
-        transform 0.62s cubic-bezier(0.65, 0, 0.35, 1),
-        opacity 0.2s ease 0.24s,
-        filter 0.45s ease,
-        box-shadow 0.45s ease;
       pointer-events: auto;
       cursor: pointer;
-      will-change: transform;
+      will-change: transform, opacity, filter;
     }
+
+    /* 纸张内层：微皱边缘裁剪 + 真实纸张肌理 */
     .paper-crumple {
       position: absolute;
       inset: 0;
-      background-color: #fffdf8;
+      background-color: #fcfaf2;
       background-image:
-        repeating-linear-gradient(0deg, rgba(120, 110, 88, 0.03) 0 1px, rgba(120, 110, 88, 0) 1px 3px),
-        repeating-linear-gradient(90deg, rgba(120, 110, 88, 0.02) 0 1px, rgba(120, 110, 88, 0) 1px 4px),
-        radial-gradient(120% 90% at 18% 8%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 60%);
+        /* 展开后残留的微弱纸张凹凸漫反射 */
+        radial-gradient(ellipse at 24% 20%, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0) 48%),
+        radial-gradient(ellipse at 78% 32%, rgba(165, 152, 126, 0.08) 0%, rgba(165, 152, 126, 0) 44%),
+        radial-gradient(ellipse at 36% 74%, rgba(165, 152, 126, 0.07) 0%, rgba(165, 152, 126, 0) 46%),
+        radial-gradient(ellipse at 72% 82%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 42%),
+        repeating-linear-gradient(0deg, rgba(120, 110, 88, 0.025) 0 1px, rgba(120, 110, 88, 0) 1px 3px),
+        repeating-linear-gradient(90deg, rgba(120, 110, 88, 0.018) 0 1px, rgba(120, 110, 88, 0) 1px 4px);
       border-radius: 2px;
-      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset;
+      box-shadow:
+        inset 0 0 0 1px rgba(130, 118, 96, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.95),
+        inset 0 0 36px rgba(168, 154, 126, 0.08);
       overflow: hidden;
-      clip-path: polygon(0% 0%, 25% 0%, 50% 0%, 75% 0%, 100% 0%, 100% 25%, 100% 50%, 100% 75%, 100% 100%, 75% 100%, 50% 100%, 25% 100%, 0% 100%, 0% 75%, 0% 50%, 0% 25%);
-      transition: clip-path 0.62s cubic-bezier(0.65, 0, 0.35, 1);
+      /* 展开后略带手工摊平的不规则微折边，绝不是死板几何矩形 */
+      clip-path: polygon(
+        0.4% 0.6%, 16% 0.1%, 34% 0.5%, 52% 0.0%, 69% 0.4%, 85% 0.1%, 99.5% 0.5%,
+        99.9% 18%, 99.4% 37%, 100% 54%, 99.5% 73%, 99.9% 89%, 99.4% 99.5%,
+        83% 99.9%, 66% 99.4%, 49% 100%, 31% 99.5%, 14% 99.9%, 0.5% 99.4%,
+        0.1% 86%, 0.6% 68%, 0.0% 50%, 0.5% 32%, 0.1% 14%
+      );
       will-change: clip-path;
     }
-    /* 揉皱时浮出的褶皱 */
-    .paper-crumple::before {
-      content: "";
+
+    /* 覆盖整张纸的 3D 三角折面网格 SVG：展开时保留淡淡折痕，揉捏时强烈浮现立体明暗折面 */
+    .paper-crease-svg {
       position: absolute;
       inset: 0;
+      width: 100%;
+      height: 100%;
       pointer-events: none;
-      opacity: 0;
-      background:
-        radial-gradient(ellipse at 50% 46%, rgba(255, 255, 255, 0.9) 0 5%, rgba(255, 255, 255, 0) 42%),
-        conic-gradient(from 18deg at 50% 48%, rgba(120, 110, 88, 0.2) 0 5%, rgba(255, 255, 255, 0.62) 7% 10%, rgba(120, 110, 88, 0.04) 12% 20%, rgba(255, 255, 255, 0.74) 22% 25%, rgba(120, 110, 88, 0.16) 27% 31%, rgba(255, 255, 255, 0.04) 34% 45%, rgba(120, 110, 88, 0.2) 48% 52%, rgba(255, 255, 255, 0.72) 54% 58%, rgba(120, 110, 88, 0.04) 61% 72%, rgba(255, 255, 255, 0.76) 75% 78%, rgba(120, 110, 88, 0.15) 80% 84%, rgba(255, 255, 255, 0.05) 87% 96%, rgba(120, 110, 88, 0.2) 98% 100%),
-        linear-gradient(64deg, transparent 45%, rgba(120, 110, 88, 0.28) 47%, transparent 50%),
-        linear-gradient(-28deg, transparent 37%, rgba(255, 255, 255, 0.9) 39%, transparent 42%),
-        linear-gradient(112deg, transparent 57%, rgba(120, 110, 88, 0.2) 59%, transparent 62%),
-        linear-gradient(18deg, transparent 25%, rgba(120, 110, 88, 0.16) 27%, transparent 30%),
-        linear-gradient(-72deg, transparent 68%, rgba(255, 255, 255, 0.82) 70%, transparent 73%);
-      transition: opacity 0.24s ease;
+      z-index: 2;
     }
-    /* 纸张对折过的那道折痕 */
-    .paper-crumple::after {
-      content: "";
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      left: 63%;
-      width: 14px;
-      transform: translateX(-7px);
-      background: linear-gradient(90deg,
-        rgba(120, 110, 88, 0) 0%,
-        rgba(120, 110, 88, 0.055) 45%,
-        rgba(120, 110, 88, 0.02) 55%,
-        rgba(120, 110, 88, 0) 100%);
-      transition: opacity 0.16s ease;
-      pointer-events: none;
+    .paper-crease-facets {
+      opacity: 0.16;
+      transition: opacity 0.18s ease;
     }
+    .paper-crease-lines {
+      opacity: 0.38;
+      transition: opacity 0.18s ease;
+    }
+
     .paper.is-dragging .paper-sheet { cursor: grabbing; }
 
     /* 纸上的字 */
     .paper-content {
       position: absolute;
       inset: 0;
+      z-index: 1;
       overflow-y: auto;
       padding: 30px 42px 26px;
       font-size: 13px;
       line-height: 1.6;
       color: #34322c;
-      transition: opacity 0.2s ease 0.2s;
       scrollbar-width: none;
       -ms-overflow-style: none;
+      transform-origin: 50% 50%;
     }
     .paper-content::-webkit-scrollbar { display: none; }
     .paper-content h2 {
@@ -280,110 +275,276 @@
       letter-spacing: 0.3px;
     }
 
-    /* 收起后：一团揉皱的纸 */
+    /* 收起后：真正的多折面立体纸团（SVG 多面体棱角 + 深折缝阴影 + 残存字迹） */
     .paper-ball {
       position: absolute;
       left: 50%;
       top: 50%;
-      width: 88px;
-      height: 88px;
-      margin: -44px 0 0 -44px;
-      border-radius: 46% 54% 49% 51% / 53% 47% 53% 47%;
-      background:
-        /* 高光 */
-        radial-gradient(circle at 29% 25%, rgba(255, 255, 255, 0.95) 0 8%, rgba(255, 255, 255, 0) 36%),
-        /* 右下暗面 */
-        radial-gradient(circle at 74% 76%, rgba(120, 110, 88, 0.22) 0 12%, rgba(120, 110, 88, 0) 48%),
-        /* 几道折痕 */
-        linear-gradient(56deg, rgba(0, 0, 0, 0) 41%, rgba(120, 110, 88, 0.2) 43%, rgba(120, 110, 88, 0) 45%),
-        linear-gradient(-34deg, rgba(0, 0, 0, 0) 58%, rgba(120, 110, 88, 0.15) 60%, rgba(120, 110, 88, 0) 62%),
-        linear-gradient(124deg, rgba(0, 0, 0, 0) 26%, rgba(255, 255, 255, 0.85) 28%, rgba(255, 255, 255, 0) 30%),
-        linear-gradient(-98deg, rgba(0, 0, 0, 0) 68%, rgba(120, 110, 88, 0.13) 70%, rgba(120, 110, 88, 0) 72%),
-        linear-gradient(18deg, rgba(0, 0, 0, 0) 74%, rgba(120, 110, 88, 0.16) 77%, rgba(120, 110, 88, 0) 80%),
-        /* 球体本身 */
-        radial-gradient(circle at 46% 42%, #fcfbf7 0 36%, #f0ede5 62%, #dedacd 85%, #ccc6b7 100%);
-      box-shadow:
-        0 2px 3px -1px rgba(15, 23, 42, 0.18),
-        0 14px 22px -12px rgba(15, 23, 42, 0.5),
-        inset -9px -11px 18px rgba(120, 110, 88, 0.24),
-        inset 7px 9px 15px rgba(255, 255, 255, 0.95),
-        0 0 0 1px rgba(120, 110, 88, 0.1);
+      width: 108px;
+      height: 108px;
+      margin: -54px 0 0 -54px;
       opacity: 0;
-      transform: scale(0.2) rotate(-30deg);
+      transform: scale(0.35) rotate(-8deg);
       pointer-events: none;
       cursor: pointer;
-      transition: transform 0.5s cubic-bezier(0.34, 1.4, 0.64, 1), opacity 0.26s ease;
-      will-change: transform;
+      filter:
+        drop-shadow(0 3px 4px rgba(15, 23, 42, 0.22))
+        drop-shadow(0 14px 22px rgba(15, 23, 42, 0.34));
+      will-change: transform, opacity;
+      transition: filter 0.2s ease;
+    }
+    .paper-ball svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+      overflow: visible;
+      transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .paper-ball:hover svg {
+      transform: scale(1.04) rotate(-2.5deg);
+    }
+    .paper-ball:active svg {
+      transform: scale(0.95) rotate(2deg);
     }
 
-    /* 揉纸团：纸边先被挤成不规则的一块，褶皱同时浮现，最后收进去 */
-    .paper-ball::before,
-    .paper-ball::after {
-      content: "";
-      position: absolute;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.2s ease 0.24s, transform 0.54s cubic-bezier(0.2, 0.8, 0.25, 1) 0.2s;
-    }
-    .paper-ball::before {
-      inset: 7px 8px 10px;
-      border-radius: 45% 55% 48% 52% / 56% 42% 58% 44%;
-      background:
-        radial-gradient(ellipse at 38% 28%, rgba(255, 255, 255, 0.88), transparent 42%),
-        conic-gradient(from 8deg at 52% 48%, rgba(120, 110, 88, 0.3) 0 9%, rgba(255, 255, 255, 0.78) 11% 17%, rgba(120, 110, 88, 0.08) 19% 30%, rgba(255, 255, 255, 0.82) 32% 39%, rgba(120, 110, 88, 0.26) 41% 48%, rgba(255, 255, 255, 0.12) 50% 61%, rgba(120, 110, 88, 0.28) 63% 69%, rgba(255, 255, 255, 0.84) 71% 78%, rgba(120, 110, 88, 0.08) 80% 90%, rgba(255, 255, 255, 0.72) 92% 100%);
-      clip-path: polygon(50% 0%, 66% 7%, 82% 4%, 91% 19%, 100% 35%, 91% 49%, 97% 64%, 83% 77%, 76% 94%, 58% 91%, 44% 100%, 30% 88%, 12% 89%, 10% 70%, 0% 57%, 8% 42%, 3% 25%, 20% 15%, 32% 3%);
-      box-shadow: inset 3px 3px 7px rgba(255, 255, 255, 0.72), inset -4px -5px 8px rgba(91, 82, 67, 0.22);
-      transform: rotate(-26deg) scale(0.72);
-    }
-    .paper-ball::after {
-      inset: 13px 14px 15px;
-      border-radius: 48% 52% 43% 57% / 54% 45% 55% 46%;
-      background:
-        linear-gradient(145deg, transparent 0 43%, rgba(100, 90, 72, 0.32) 45%, rgba(255, 255, 255, 0.78) 48%, transparent 51%),
-        linear-gradient(34deg, transparent 0 48%, rgba(100, 90, 72, 0.24) 50%, rgba(255, 255, 255, 0.76) 53%, transparent 56%),
-        linear-gradient(86deg, transparent 0 40%, rgba(100, 90, 72, 0.22) 42%, rgba(255, 255, 255, 0.66) 45%, transparent 48%);
-      clip-path: polygon(50% 0%, 73% 10%, 100% 32%, 87% 56%, 96% 78%, 68% 100%, 45% 86%, 24% 96%, 0% 69%, 16% 48%, 4% 27%, 32% 11%);
-      transform: rotate(38deg) scale(0.55);
+    /* ==================== 真实分步揉纸团 & 摊开纸团关键帧动画 ==================== */
+    /* 1. 揉纸团（收起）：双手分三次向心抓拢折皱挤压，绝不旋转720度！ */
+    @keyframes sheetCrumpleSteps {
+      0% {
+        transform: rotate(-0.7deg) scale(1, 1);
+        opacity: 1;
+      }
+      /* 第一抓：四周边缘向内折起，纸面轻微歪斜紧缩 */
+      24% {
+        transform: translate(4px, -3px) rotate(-4.2deg) scale(0.82, 0.86) skew(3deg, -2deg);
+        opacity: 1;
+      }
+      32% {
+        transform: translate(3px, -2px) rotate(-3.0deg) scale(0.78, 0.82) skew(2deg, -1.5deg);
+        opacity: 1;
+      }
+      /* 第二抓：双手换向用力往中间死死一捏，纸张剧烈坍缩成多角折块 */
+      58% {
+        transform: translate(-5px, 4px) rotate(5.8deg) scale(0.46, 0.41) skew(-5.5deg, 4deg);
+        opacity: 1;
+      }
+      66% {
+        transform: translate(-3px, 3px) rotate(4.2deg) scale(0.42, 0.38) skew(-4deg, 3deg);
+        opacity: 0.96;
+      }
+      /* 第三抓：彻底团成中心紧实纸核并交接给立体纸团 */
+      88% {
+        transform: translate(1px, -1px) rotate(-5.5deg) scale(0.17, 0.19) skew(4deg, -3deg);
+        opacity: 0.15;
+      }
+      100% {
+        transform: translate(0, 0) rotate(-4deg) scale(0.14, 0.14);
+        opacity: 0;
+      }
     }
 
-    .paper.is-collapsed .paper-sheet {
-      transform: rotate(720deg) scale(0.16) skew(8deg, -7deg);
-      filter: blur(0.2px) brightness(0.98);
+    @keyframes polygonCrumpleSteps {
+      0% {
+        clip-path: polygon(
+          0.4% 0.6%, 16% 0.1%, 34% 0.5%, 52% 0.0%, 69% 0.4%, 85% 0.1%, 99.5% 0.5%,
+          99.9% 18%, 99.4% 37%, 100% 54%, 99.5% 73%, 99.9% 89%, 99.4% 99.5%,
+          83% 99.9%, 66% 99.4%, 49% 100%, 31% 99.5%, 14% 99.9%, 0.5% 99.4%,
+          0.1% 86%, 0.6% 68%, 0.0% 50%, 0.5% 32%, 0.1% 14%
+        );
+      }
+      28% {
+        clip-path: polygon(
+          11% 8%, 24% 3%, 39% 9%, 54% 4%, 68% 10%, 84% 5%, 92% 14%,
+          96% 26%, 89% 41%, 95% 56%, 88% 71%, 93% 85%, 84% 94%,
+          70% 91%, 56% 96%, 42% 90%, 27% 95%, 14% 89%, 7% 82%,
+          12% 68%, 5% 53%, 11% 38%, 6% 24%, 13% 14%
+        );
+      }
+      62% {
+        clip-path: polygon(
+          26% 22%, 35% 15%, 47% 21%, 59% 14%, 71% 20%, 78% 28%, 84% 36%,
+          77% 46%, 83% 57%, 75% 68%, 79% 77%, 68% 83%, 57% 78%,
+          49% 85%, 39% 79%, 29% 84%, 21% 75%, 25% 64%, 17% 55%,
+          23% 44%, 16% 35%, 24% 28%, 20% 24%, 25% 23%
+        );
+      }
+      100% {
+        clip-path: polygon(
+          38% 34%, 45% 29%, 52% 32%, 59% 28%, 65% 34%, 69% 40%, 66% 47%,
+          71% 53%, 65% 60%, 60% 66%, 53% 63%, 47% 68%, 40% 64%,
+          35% 60%, 37% 53%, 32% 47%, 36% 41%, 33% 37%, 36% 35%, 37% 34%,
+          38% 34%, 38% 34%, 38% 34%, 38% 34%
+        );
+      }
+    }
+
+    @keyframes ballCrumpleIn {
+      0%, 54% {
+        opacity: 0;
+        transform: scale(1.38, 1.28) rotate(6deg);
+      }
+      /* 纸团捏紧到最实 */
+      76% {
+        opacity: 1;
+        transform: scale(0.84, 0.90) rotate(-6deg);
+      }
+      /* 松手后纸张纤维自然微弹开一点点 */
+      90% {
+        opacity: 1;
+        transform: scale(1.06, 0.96) rotate(2.5deg);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1, 1) rotate(0deg);
+      }
+    }
+
+    /* 2. 摊开纸团（展开）：从中心纸团分步扒开四角、最后在桌面抚平 */
+    @keyframes ballUnfoldOut {
+      0% {
+        opacity: 1;
+        transform: scale(1, 1) rotate(0deg);
+      }
+      /* 先把纸团往外扯松 */
+      22% {
+        opacity: 1;
+        transform: scale(1.26, 1.16) rotate(-5deg);
+      }
+      42%, 100% {
+        opacity: 0;
+        transform: scale(1.65, 1.55) rotate(4deg);
+      }
+    }
+
+    @keyframes sheetUnfoldSteps {
+      0%, 14% {
+        transform: translate(0, 0) rotate(-5deg) scale(0.18, 0.20) skew(4deg, -3deg);
+        opacity: 0;
+      }
+      /* 第一扒：纸团被扯开成紧缩的折块 */
+      26% {
+        transform: translate(-4px, 3px) rotate(4.8deg) scale(0.42, 0.38) skew(-5deg, 3.5deg);
+        opacity: 1;
+      }
+      /* 第二扒：向左右两侧拉开成半展开的皱纸 */
+      54% {
+        transform: translate(4px, -3px) rotate(-3.6deg) scale(0.76, 0.72) skew(3deg, -2deg);
+        opacity: 1;
+      }
+      62% {
+        transform: translate(2px, -2px) rotate(-2.4deg) scale(0.73, 0.70) skew(2deg, -1.5deg);
+        opacity: 1;
+      }
+      /* 第三扒：四角完全掀开并按在桌面上抚平 */
+      88% {
+        transform: translate(-1px, 1px) rotate(0.6deg) scale(1.015, 1.008) skew(-0.5deg, 0.4deg);
+        opacity: 1;
+      }
+      100% {
+        transform: rotate(-0.7deg) scale(1, 1) skew(0deg, 0deg);
+        opacity: 1;
+      }
+    }
+
+    @keyframes polygonUnfoldSteps {
+      0%, 14% {
+        clip-path: polygon(
+          38% 34%, 45% 29%, 52% 32%, 59% 28%, 65% 34%, 69% 40%, 66% 47%,
+          71% 53%, 65% 60%, 60% 66%, 53% 63%, 47% 68%, 40% 64%,
+          35% 60%, 37% 53%, 32% 47%, 36% 41%, 33% 37%, 36% 35%, 37% 34%,
+          38% 34%, 38% 34%, 38% 34%, 38% 34%
+        );
+      }
+      32% {
+        clip-path: polygon(
+          26% 22%, 35% 15%, 47% 21%, 59% 14%, 71% 20%, 78% 28%, 84% 36%,
+          77% 46%, 83% 57%, 75% 68%, 79% 77%, 68% 83%, 57% 78%,
+          49% 85%, 39% 79%, 29% 84%, 21% 75%, 25% 64%, 17% 55%,
+          23% 44%, 16% 35%, 24% 28%, 20% 24%, 25% 23%
+        );
+      }
+      62% {
+        clip-path: polygon(
+          11% 8%, 24% 3%, 39% 9%, 54% 4%, 68% 10%, 84% 5%, 92% 14%,
+          96% 26%, 89% 41%, 95% 56%, 88% 71%, 93% 85%, 84% 94%,
+          70% 91%, 56% 96%, 42% 90%, 27% 95%, 14% 89%, 7% 82%,
+          12% 68%, 5% 53%, 11% 38%, 6% 24%, 13% 14%
+        );
+      }
+      100% {
+        clip-path: polygon(
+          0.4% 0.6%, 16% 0.1%, 34% 0.5%, 52% 0.0%, 69% 0.4%, 85% 0.1%, 99.5% 0.5%,
+          99.9% 18%, 99.4% 37%, 100% 54%, 99.5% 73%, 99.9% 89%, 99.4% 99.5%,
+          83% 99.9%, 66% 99.4%, 49% 100%, 31% 99.5%, 14% 99.9%, 0.5% 99.4%,
+          0.1% 86%, 0.6% 68%, 0.0% 50%, 0.5% 32%, 0.1% 14%
+        );
+      }
+    }
+
+    /* 静态收起态（页面初始进入或揉纸完成） */
+    .paper.is-collapsed:not(.is-crumpling):not(.is-unfolding) .paper-sheet {
+      transform: scale(0.14);
       opacity: 0;
       pointer-events: none;
-      box-shadow: none;
-      transition:
-        transform 0.62s cubic-bezier(0.65, 0, 0.35, 1),
-        opacity 0.14s ease 0.48s,
-        filter 0.5s ease,
-        box-shadow 0.3s ease;
     }
-    .paper.is-collapsed .paper-crumple {
-      clip-path: polygon(44% 33%, 49% 29%, 56% 31%, 62% 36%, 66% 43%, 63% 49%, 67% 55%, 61% 61%, 55% 66%, 48% 63%, 42% 68%, 36% 62%, 34% 54%, 38% 48%, 35% 40%, 39% 35%);
-      transition: clip-path 0.62s cubic-bezier(0.65, 0, 0.35, 1);
-    }
-    .paper.is-collapsed .paper-crumple::before {
-      opacity: 1;
-      transition: opacity 0.24s ease 0.04s;
-    }
-    .paper.is-collapsed .paper-ball {
+    .paper.is-collapsed:not(.is-crumpling):not(.is-unfolding) .paper-ball {
       opacity: 1;
       transform: scale(1) rotate(0deg);
       pointer-events: auto;
-      transition: opacity 0.2s ease 0.2s, transform 0.54s cubic-bezier(0.2, 0.8, 0.25, 1) 0.2s;
     }
-    .paper.is-collapsed .paper-ball::before,
-    .paper.is-collapsed .paper-ball::after {
+
+    /* 正在揉成纸团动画态 */
+    .paper.is-crumpling .paper-sheet {
+      pointer-events: none;
+      animation: sheetCrumpleSteps 0.58s cubic-bezier(0.32, 0.04, 0.24, 1) forwards;
+    }
+    .paper.is-crumpling .paper-crumple {
+      animation: polygonCrumpleSteps 0.58s cubic-bezier(0.32, 0.04, 0.24, 1) forwards;
+    }
+    .paper.is-crumpling .paper-crease-facets {
+      opacity: 0.96;
+      transition: opacity 0.14s ease;
+    }
+    .paper.is-crumpling .paper-crease-lines {
+      opacity: 0.95;
+      transition: opacity 0.14s ease;
+    }
+    .paper.is-crumpling .paper-content {
+      opacity: 0.18;
+      transform: scale(0.94) skew(3deg, -2deg);
+      transition: opacity 0.26s ease 0.06s, transform 0.36s ease;
+    }
+    .paper.is-crumpling .paper-ball {
+      pointer-events: auto;
+      animation: ballCrumpleIn 0.58s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    /* 正在摊开纸团动画态 */
+    .paper.is-unfolding .paper-sheet {
+      pointer-events: auto;
+      animation: sheetUnfoldSteps 0.64s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+    .paper.is-unfolding .paper-crumple {
+      animation: polygonUnfoldSteps 0.64s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+    .paper.is-unfolding .paper-crease-facets {
+      opacity: 0.16;
+      transition: opacity 0.48s ease 0.16s;
+    }
+    .paper.is-unfolding .paper-crease-lines {
+      opacity: 0.38;
+      transition: opacity 0.48s ease 0.16s;
+    }
+    .paper.is-unfolding .paper-content {
       opacity: 1;
-      transform: rotate(0deg) scale(1);
+      transform: none;
+      transition: opacity 0.32s ease 0.22s, transform 0.42s ease 0.18s;
     }
-    .paper.is-collapsed .paper-crumple::after {
-      opacity: 0;
+    .paper.is-unfolding .paper-ball {
+      pointer-events: none;
+      animation: ballUnfoldOut 0.64s cubic-bezier(0.22, 1, 0.36, 1) forwards;
     }
-    .paper.is-collapsed .paper-content {
-      opacity: 0;
-      transition: opacity 0.12s ease;
-    }
+
     .paper.is-dragging .paper-ball { cursor: grabbing; }
 
     .paper-handle {
@@ -401,10 +562,10 @@
     .paper-sw { left: 0; top: 100%; cursor: nesw-resize; }
     .paper-se { left: 100%; top: 100%; cursor: nwse-resize; }
     /* 收起时手柄贴到纸团四角 */
-    .paper.is-collapsed .paper-nw { left: calc(50% - 46px); top: calc(50% - 46px); }
-    .paper.is-collapsed .paper-ne { left: calc(50% + 46px); top: calc(50% - 46px); }
-    .paper.is-collapsed .paper-sw { left: calc(50% - 46px); top: calc(50% + 46px); }
-    .paper.is-collapsed .paper-se { left: calc(50% + 46px); top: calc(50% + 46px); }
+    .paper.is-collapsed .paper-nw { left: calc(50% - 48px); top: calc(50% - 48px); }
+    .paper.is-collapsed .paper-ne { left: calc(50% + 48px); top: calc(50% - 48px); }
+    .paper.is-collapsed .paper-sw { left: calc(50% - 48px); top: calc(50% + 48px); }
+    .paper.is-collapsed .paper-se { left: calc(50% + 48px); top: calc(50% + 48px); }
 
     /* ---------- 顶部控制条（默认置顶，可拖动 / 可缩放） ---------- */
     .dock {
@@ -482,18 +643,21 @@
       font-weight: 600;
       line-height: 1;
       cursor: pointer;
-      transition: background 0.16s ease, color 0.16s ease;
+      transition: background 0.16s ease, color 0.16s ease, transform 0.14s ease;
     }
     .ctl:hover { background: rgba(15, 23, 42, 0.055); color: #111827; }
+    .ctl:active { transform: scale(0.95); }
     .ctl svg { width: 14px; height: 14px; }
 
     .ctl.is-off { color: #b6bcc5; }
-    /* 静音时在"声音"两字上打一个红叉：从左边扫出来，带一点缩放回弹 */
-    #btn-audio .ctl-text {
+    /* 关闭"半透明"或"声音"时，在文字上打一个红叉：从左往右扫出来，带轻微缩放回弹 */
+    #btn-audio .ctl-text,
+    #btn-xray .ctl-text {
       position: relative;
-      transition: color 0.18s ease;
+      transition: color 0.18s ease, opacity 0.18s ease;
     }
-    #btn-audio .ctl-text::after {
+    #btn-audio .ctl-text::after,
+    #btn-xray .ctl-text::after {
       content: "";
       position: absolute;
       left: -5px;
@@ -507,7 +671,7 @@
         linear-gradient(-45deg, transparent calc(50% - 0.8px), #dc2626 calc(50% - 0.8px), #dc2626 calc(50% + 0.8px), transparent calc(50% + 0.8px)),
         linear-gradient(45deg, transparent calc(50% - 1.9px), rgba(255, 255, 255, 0.92) calc(50% - 1.9px), rgba(255, 255, 255, 0.92) calc(50% + 1.9px), transparent calc(50% + 1.9px)),
         linear-gradient(-45deg, transparent calc(50% - 1.9px), rgba(255, 255, 255, 0.92) calc(50% - 1.9px), rgba(255, 255, 255, 0.92) calc(50% + 1.9px), transparent calc(50% + 1.9px));
-      /* 平时藏着：右侧整块裁掉 + 略放大，点静音时从左往右扫出来 */
+      /* 平时藏着：右侧整块裁掉 + 略放大，点击关闭时从左往右扫出来 */
       clip-path: inset(0 100% 0 0);
       transform: scale(1.14);
       opacity: 0.2;
@@ -516,11 +680,20 @@
         transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
         opacity 0.16s ease;
     }
-    #btn-audio.is-off { color: #9aa1ab; }
-    #btn-audio.is-off .ctl-text::after {
+    #btn-audio.is-off,
+    #btn-xray.is-off { color: #9aa1ab; }
+    #btn-audio.is-off .ctl-text::after,
+    #btn-xray.is-off .ctl-text::after {
       clip-path: inset(0 0 0 0);
       transform: scale(1);
       opacity: 1;
+    }
+
+    /* 面板半透明/不透明切换时的平滑过渡 */
+    #front-plate-fill,
+    #back-plate-fill,
+    #ghost-neighbors {
+      transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
     }
 
     /* ---------- 缩放 / 移动手柄 ---------- */
@@ -842,6 +1015,40 @@
     <div class="paper is-collapsed" id="paper">
       <div class="paper-sheet">
         <div class="paper-crumple">
+          <!-- 真实折纸网格层：展开时留有浅浅折痕，揉捏/摊开瞬间浮现强烈立体折面 -->
+          <svg class="paper-crease-svg" viewBox="0 0 520 720" preserveAspectRatio="none" aria-hidden="true">
+            <g class="paper-crease-facets">
+              <polygon points="0,0 190,0 138,142 0,120" fill="#f2ede1" />
+              <polygon points="190,0 356,0 282,126 138,142" fill="#fffdf9" />
+              <polygon points="356,0 520,0 520,136 394,154 282,126" fill="#e5dfd0" />
+              <polygon points="0,120 138,142 104,288 0,264" fill="#e8e2d4" />
+              <polygon points="138,142 282,126 248,266 104,288" fill="#faf7f0" />
+              <polygon points="282,126 394,154 362,292 248,266" fill="#dfd8c7" />
+              <polygon points="394,154 520,136 520,304 362,292" fill="#f7f4eb" />
+              <polygon points="0,264 104,288 156,418 0,432" fill="#fdfbf6" />
+              <polygon points="104,288 248,266 268,384 156,418" fill="#d9d1be" />
+              <polygon points="248,266 362,292 384,424 268,384" fill="#fffefb" />
+              <polygon points="362,292 520,304 520,456 384,424" fill="#e2dbcb" />
+              <polygon points="0,432 156,418 118,568 0,584" fill="#e6dfd0" />
+              <polygon points="156,418 268,384 294,542 118,568" fill="#fbf9f2" />
+              <polygon points="268,384 384,424 412,564 294,542" fill="#ded7c5" />
+              <polygon points="384,424 520,456 520,596 412,564" fill="#f6f2e8" />
+              <polygon points="0,584 118,568 174,720 0,720" fill="#faf7ef" />
+              <polygon points="118,568 294,542 338,720 174,720" fill="#e3dccb" />
+              <polygon points="294,542 412,564 520,720 338,720" fill="#fdfbf7" />
+              <polygon points="412,564 520,596 520,720" fill="#dcd4c2" />
+            </g>
+            <g class="paper-crease-lines" fill="none" stroke-linecap="round">
+              <!-- 折脊高光线 -->
+              <path d="M190,0 L138,142 L282,126 L248,266 L362,292 L268,384 L384,424 L294,542 L338,720" stroke="#ffffff" stroke-width="2" />
+              <path d="M0,264 L104,288 L248,266 M156,418 L268,384 M118,568 L294,542 L412,564" stroke="#ffffff" stroke-width="1.6" />
+              <!-- 折谷暗线 -->
+              <path d="M190,0 L138,142 L104,288 L156,418 L118,568 L174,720" stroke="rgba(115, 102, 78, 0.35)" stroke-width="1.2" />
+              <path d="M356,0 L282,126 L394,154 L362,292 L384,424 L412,564 L520,720" stroke="rgba(115, 102, 78, 0.32)" stroke-width="1.2" />
+              <path d="M0,120 L138,142 L282,126 L520,136 M0,432 L156,418 L268,384 L384,424 L520,456" stroke="rgba(115, 102, 78, 0.28)" stroke-width="1.1" />
+              <path d="M104,288 L268,384 L118,568 M282,126 L248,266 L156,418" stroke="rgba(115, 102, 78, 0.24)" stroke-width="1" />
+            </g>
+          </svg>
           <div class="paper-content">
           <h2>使用说明</h2>
 
@@ -866,7 +1073,95 @@
           </div>
         </div>
       </div>
-        <div class="paper-ball" id="paper-ball" title="单击展开"></div>
+        <div class="paper-ball" id="paper-ball" title="单击展开说明书（长按可拖动）">
+          <!-- 真实多折面立体纸团 SVG：棱角分明的多边形折面、深浅折谷阴影与残存说明书字迹 -->
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <defs>
+              <linearGradient id="pb-lit" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#ffffff" />
+                <stop offset="100%" stop-color="#f5f1e6" />
+              </linearGradient>
+              <linearGradient id="pb-mid" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#f4efe2" />
+                <stop offset="100%" stop-color="#e2dac8" />
+              </linearGradient>
+              <linearGradient id="pb-shade" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#dfd7c5" />
+                <stop offset="100%" stop-color="#c7beaa" />
+              </linearGradient>
+              <linearGradient id="pb-deep" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#b8ae99" />
+                <stop offset="100%" stop-color="#968b76" />
+              </linearGradient>
+            </defs>
+
+            <!-- 1. 底层外轮廓基底（不规则多角折边） -->
+            <polygon points="34,11 55,15 76,9 97,22 109,41 103,63 111,81 94,99 73,109 52,104 31,110 14,93 9,70 16,49 11,29" fill="#d8d0be" />
+
+            <!-- 2. 外圈折角与侧翼折面 -->
+            <polygon points="34,11 55,15 44,33 23,28" fill="url(#pb-lit)" />
+            <polygon points="55,15 76,9 69,30 44,33" fill="#f7f3e8" />
+            <polygon points="76,9 97,22 83,38 69,30" fill="url(#pb-mid)" />
+            <polygon points="97,22 109,41 88,52 83,38" fill="#ddd5c3" />
+            <polygon points="109,41 103,63 86,60 88,52" fill="url(#pb-shade)" />
+            <polygon points="103,63 111,81 89,80 86,60" fill="#d3cab6" />
+            <polygon points="111,81 94,99 78,86 89,80" fill="url(#pb-shade)" />
+            <polygon points="94,99 73,109 68,91 78,86" fill="#c5bca8" />
+            <polygon points="73,109 52,104 54,88 68,91" fill="url(#pb-deep)" />
+            <polygon points="52,104 31,110 38,89 54,88" fill="#d6cebc" />
+            <polygon points="31,110 14,93 30,78 38,89" fill="url(#pb-shade)" />
+            <polygon points="14,93 9,70 27,66 30,78" fill="#e5decb" />
+            <polygon points="9,70 16,49 31,51 27,66" fill="url(#pb-mid)" />
+            <polygon points="16,49 11,29 23,28 31,51" fill="#fbf8f0" />
+            <polygon points="11,29 34,11 23,28" fill="#ffffff" />
+
+            <!-- 3. 深陷的折谷暗袋（体现纸团往里塞的立体深度） -->
+            <polygon points="44,33 69,30 58,46 39,44" fill="url(#pb-deep)" />
+            <polygon points="83,38 88,52 72,58 69,30" fill="#b9b09c" />
+            <polygon points="31,51 47,56 30,78 27,66" fill="#aba18d" />
+            <polygon points="68,91 78,86 72,69 54,88" fill="#afa591" />
+
+            <!-- 4. 中央主受光折面与交叠纸瓣 -->
+            <polygon points="23,28 44,33 39,44 31,51" fill="#fffdf9" />
+            <polygon points="39,44 58,46 47,56 31,51" fill="url(#pb-lit)" />
+            <polygon points="58,46 69,30 72,58 55,64 47,56" fill="#fcfaf2" />
+            <polygon points="72,58 88,52 86,60 72,69 55,64" fill="url(#pb-mid)" />
+            <polygon points="86,60 89,80 78,86 72,69" fill="#dfd7c4" />
+            <polygon points="47,56 55,64 54,88 38,89 30,78" fill="#f3eee2" />
+            <polygon points="55,64 72,69 54,88" fill="#e2dac7" />
+
+            <!-- 5. 顶层翘起的折瓣投影与高光纸片（制造真纸叠压感） -->
+            <polygon points="37,43 63,39 54,65 33,57" fill="rgba(55, 46, 32, 0.18)" transform="translate(2, 3)" />
+            <polygon points="36,42 62,38 53,63 32,55" fill="url(#pb-lit)" />
+            <polygon points="62,38 81,46 73,68 53,63" fill="#efe9da" />
+
+            <!-- 6. 纸团表面残存的微缩说明书文字与排版线条（让人一眼看出是那张说明书揉成的） -->
+            <g opacity="0.42" fill="#3a362e" font-family="Inter, sans-serif" font-weight="800">
+              <text x="39" y="51" font-size="5.2" transform="rotate(-14 45 50)">使用说明</text>
+              <line x1="38" y1="54" x2="55" y2="50" stroke="#575043" stroke-width="0.9" stroke-linecap="round" />
+              <line x1="39" y1="57" x2="52" y2="54" stroke="#787060" stroke-width="0.7" stroke-linecap="round" />
+              <text x="58" y="54" font-size="4.5" transform="rotate(18 64 54)">4-6-1</text>
+              <line x1="41" y1="71" x2="51" y2="76" stroke="#6b6354" stroke-width="0.8" stroke-linecap="round" />
+              <line x1="39" y1="74" x2="49" y2="79" stroke="#857c6b" stroke-width="0.7" stroke-linecap="round" />
+              <text x="48" y="25" font-size="4.2" transform="rotate(-8 52 24)">五度圈</text>
+            </g>
+
+            <!-- 7. 锐利的折痕高光脊线与折谷线 -->
+            <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <!-- 受光折脊白边 -->
+              <polyline points="11,29 23,28 44,33 69,30 83,38" stroke="#ffffff" stroke-width="1.5" opacity="0.92" />
+              <polyline points="32,55 36,42 62,38 81,46" stroke="#ffffff" stroke-width="1.6" opacity="0.95" />
+              <polyline points="36,42 53,63 73,68" stroke="#ffffff" stroke-width="1.3" opacity="0.85" />
+              <polyline points="30,78 47,56 54,88" stroke="#ffffff" stroke-width="1.2" opacity="0.75" />
+              <!-- 内部折谷暗线 -->
+              <polyline points="34,11 44,33 39,44 31,51 27,66 30,78 38,89 52,104" stroke="#9c927e" stroke-width="0.9" opacity="0.65" />
+              <polyline points="76,9 69,30 72,58 72,69 78,86 94,99" stroke="#9c927e" stroke-width="0.9" opacity="0.65" />
+              <polyline points="53,63 54,88 68,91 73,109" stroke="#8f8470" stroke-width="1" opacity="0.7" />
+              <!-- 外圈纸张裁切轮廓细线 -->
+              <polygon points="34,11 55,15 76,9 97,22 109,41 103,63 111,81 94,99 73,109 52,104 31,110 14,93 9,70 16,49 11,29" stroke="rgba(110, 100, 82, 0.36)" stroke-width="1" />
+            </g>
+          </svg>
+        </div>
         <div class="paper-handle paper-nw" data-paper="zoom"></div>
         <div class="paper-handle paper-ne" data-paper="zoom"></div>
         <div class="paper-handle paper-sw" data-paper="zoom"></div>
@@ -2034,6 +2329,8 @@
       selectKeyByIndex(state.keyIndex + deltaSteps, true);
     }
 
+    let wasWheelDragged = false;
+
     function initWheelDrag() {
       const svgFront = document.getElementById("svg-front");
       const svgBack = document.getElementById("svg-back");
@@ -2041,6 +2338,8 @@
       let isDragging = false;
       let startPointerAngle = 0;
       let startWheelAngle = 0;
+      let startClientX = 0;
+      let startClientY = 0;
       let activeSvg = null;
 
       function getAngleFromCenter(e, svgEl) {
@@ -2054,13 +2353,25 @@
 
       function onStart(e, svgEl) {
         isDragging = true;
+        wasWheelDragged = false;
         activeSvg = svgEl;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        startClientX = clientX;
+        startClientY = clientY;
         startPointerAngle = getAngleFromCenter(e, svgEl);
         startWheelAngle = state.wheelAngle;
       }
 
       function onMove(e) {
         if (!isDragging || !activeSvg) return;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        if (Math.hypot(clientX - startClientX, clientY - startClientY) > 4) {
+          wasWheelDragged = true;
+        }
+        if (!wasWheelDragged) return;
+
         const currentPointerAngle = getAngleFromCenter(e, activeSvg);
         let delta = currentPointerAngle - startPointerAngle;
         if (delta > 180) delta -= 360;
@@ -2082,17 +2393,18 @@
         if (!isDragging) return;
         isDragging = false;
         activeSvg = null;
-        const snappedIdx = Math.round(-state.wheelAngle / 30);
-        selectKeyByIndex(snappedIdx, false);
+        if (wasWheelDragged) {
+          const snappedIdx = Math.round(-state.wheelAngle / 30);
+          selectKeyByIndex(snappedIdx, false);
+          setTimeout(() => { wasWheelDragged = false; }, 50);
+        }
       }
 
       [svgFront, svgBack].forEach((svgEl) => {
         svgEl.addEventListener("mousedown", (e) => {
-          if (e.target.classList.contains("chord-hotspot")) return;
           onStart(e, svgEl);
         });
         svgEl.addEventListener("touchstart", (e) => {
-          if (e.target.classList.contains("chord-hotspot")) return;
           onStart(e, svgEl);
         }, { passive: true });
 
@@ -2398,7 +2710,9 @@
       paperY = 0;
       if (paperEl) {
         paperEl.style.transform = "translate(0px, 0px) scale(1)";
-        paperEl.classList.add("is-collapsed");
+        if (!paperEl.classList.contains("is-collapsed")) {
+          setPaperCollapsed(true, true);
+        }
       }
 
       pianoZoom = 1;
@@ -2694,11 +3008,97 @@
       }
     }
 
+    /**
+     * 揉纸团 / 摊开纸团的真实纸张摩擦声（多段带通滤波噪声脉冲，配合分步折皱关键帧）
+     */
+    function playPaperCrumpleSound(isCollapsing) {
+      if (!state.audioEnabled) return;
+      try {
+        const ctx = getAudioCtx();
+        const master = getPianoMaster(ctx);
+        const pulses = isCollapsing
+          ? [
+              { delay: 0.00, dur: 0.09, freq: 1850, q: 2.2, gain: 0.20 },
+              { delay: 0.14, dur: 0.11, freq: 2450, q: 2.6, gain: 0.26 },
+              { delay: 0.31, dur: 0.12, freq: 3100, q: 3.0, gain: 0.22 },
+              { delay: 0.45, dur: 0.06, freq: 2200, q: 2.4, gain: 0.12 }
+            ]
+          : [
+              { delay: 0.00, dur: 0.08, freq: 2900, q: 2.8, gain: 0.22 },
+              { delay: 0.15, dur: 0.12, freq: 2200, q: 2.2, gain: 0.24 },
+              { delay: 0.34, dur: 0.13, freq: 1650, q: 1.8, gain: 0.18 },
+              { delay: 0.50, dur: 0.07, freq: 1300, q: 1.5, gain: 0.11 }
+            ];
+
+        pulses.forEach((p) => {
+          const t0 = ctx.currentTime + p.delay;
+          const len = Math.floor(ctx.sampleRate * p.dur);
+          const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+          const data = buf.getChannelData(0);
+          for (let i = 0; i < len; i++) {
+            const env = Math.sin((i / len) * Math.PI);
+            // 叠加不规则微裂纹颗粒感，模拟干爽纸张纤维折皱
+            const crackle = Math.random() < 0.18 ? 1.65 : 0.65;
+            data[i] = (Math.random() * 2 - 1) * env * crackle;
+          }
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+
+          const bp = ctx.createBiquadFilter();
+          bp.type = "bandpass";
+          bp.frequency.setValueAtTime(p.freq, t0);
+          bp.Q.setValueAtTime(p.q, t0);
+
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(p.gain, t0);
+          g.gain.exponentialRampToValueAtTime(0.001, t0 + p.dur);
+
+          src.connect(bp);
+          bp.connect(g);
+          g.connect(master);
+          src.start(t0);
+          src.stop(t0 + p.dur + 0.01);
+        });
+      } catch (e) {}
+    }
+
+    let paperAnimTimer = 0;
+    function setPaperCollapsed(collapse, withAnim = true) {
+      const paper = document.getElementById("paper");
+      if (!paper) return;
+      const currentlyCollapsed = paper.classList.contains("is-collapsed");
+      if (collapse === currentlyCollapsed && !paper.classList.contains("is-crumpling") && !paper.classList.contains("is-unfolding")) {
+        return;
+      }
+      clearTimeout(paperAnimTimer);
+      paper.classList.remove("is-crumpling", "is-unfolding");
+      void paper.offsetWidth;
+
+      if (!withAnim) {
+        paper.classList.toggle("is-collapsed", collapse);
+        return;
+      }
+
+      playPaperCrumpleSound(collapse);
+      if (collapse) {
+        paper.classList.add("is-collapsed", "is-crumpling");
+        paperAnimTimer = setTimeout(() => {
+          paper.classList.remove("is-crumpling");
+        }, 600);
+      } else {
+        paper.classList.remove("is-collapsed");
+        paper.classList.add("is-unfolding");
+        paperAnimTimer = setTimeout(() => {
+          paper.classList.remove("is-unfolding");
+        }, 660);
+      }
+    }
+
     function togglePaper() {
       const paper = document.getElementById("paper");
       if (!paper) return;
-      // 纸和纸团都在同一个容器里，容器尺寸不变，所以只是切换类名
-      paper.classList.toggle("is-collapsed");
+      const nextCollapsed = !paper.classList.contains("is-collapsed");
+      setPaperCollapsed(nextCollapsed, true);
     }
 
     function initPaper() {
@@ -2828,10 +3228,11 @@
       // 默认停在 Key of G（与实体产品图示一致），静默进入
       selectKeyByIndex(1, false);
 
-      // 点任何一个窗口，听这个级数的三和弦
+      // 点任何一个窗口（未发生拖动旋转时），听这个级数的三和弦
       document.querySelectorAll(".chord-hotspot").forEach((spot) => {
         spot.addEventListener("click", (e) => {
           e.stopPropagation();
+          if (wasWheelDragged) return;
           state.selectedDegree = Number(spot.dataset.degree);
           playChordTriad(state.keyIndex, state.selectedDegree);
         });
@@ -2856,13 +3257,19 @@
         btn.addEventListener("click", () => applyColorTheme(btn.dataset.color));
       });
 
-      // 磨砂透视
+      // 磨砂透视（带红叉扫出动画与状态切换反馈，和“声音”按钮保持一致）
       const xrayBtn = document.getElementById("btn-xray");
       xrayBtn.addEventListener("click", () => {
         state.xrayTranslucent = !state.xrayTranslucent;
+        xrayBtn.classList.toggle("is-on", state.xrayTranslucent);
+        xrayBtn.classList.toggle("is-off", !state.xrayTranslucent);
+        xrayBtn.title = state.xrayTranslucent
+          ? "当前：半透明磨砂面板（点击关闭半透明）"
+          : "当前：不透明实心面板（点击开启半透明）";
         document.getElementById("front-plate-fill").setAttribute("opacity", state.xrayTranslucent ? "0.91" : "1");
         document.getElementById("back-plate-fill").setAttribute("opacity", state.xrayTranslucent ? "0.92" : "1");
         document.getElementById("ghost-neighbors").setAttribute("opacity", state.xrayTranslucent ? "0.38" : "0");
+        playMechanicalClick(0.5);
       });
 
       // 正反面翻转
