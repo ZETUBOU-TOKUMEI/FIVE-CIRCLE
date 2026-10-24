@@ -2435,12 +2435,64 @@
     let pianoZoom = 1;
     let pianoPanX = 0;
     let pianoPanY = 0;
-    const PIANO_DISPLAY_OCTAVE = '4';
+    let pianoBuilt = false;
     const PIANO_LONG_PRESS = 320;
     const PIANO_MIN_ZOOM = 0.4;
     const PIANO_MAX_ZOOM = 2.4;
-    const PIANO_WHITE_PITCHES = [0, 2, 4, 5, 7, 9, 11];
+    const PIANO_NOTE_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+    const PIANO_NATURAL_PCS = [0, 2, 4, 5, 7, 9, 11];
     const PIANO_BLACK_AFTER = [0, 1, 3, 4, 5];
+
+    /**
+     * 键盘固定按 C3–B5 排（三个八度，和真实钢琴一致），不随调性变化。
+     * 跟着主音走的只有"高亮窗口"——见 pianoWindow。
+     */
+    function buildPianoKeys() {
+      const whites = document.getElementById("piano-white-keys");
+      const blacks = document.getElementById("piano-black-keys");
+      if (pianoBuilt || !whites || !blacks) return;
+      pianoBuilt = true;
+
+      let whiteIndex = 0;
+      for (let octave = 3; octave <= 5; octave += 1) {
+        PIANO_NATURAL_PCS.forEach((pitchClass, position) => {
+          const midi = (octave + 1) * 12 + pitchClass;
+
+          const note = document.createElement("span");
+          note.className = "piano-key piano-key-white";
+          note.dataset.pitchClass = String(pitchClass);
+          note.dataset.midi = String(midi);
+          note.dataset.octave = String(octave);
+          note.setAttribute("aria-label", `${PIANO_NOTE_NAMES[pitchClass]}${octave}`);
+          note.textContent = `${PIANO_NOTE_NAMES[pitchClass]}${octave}`;
+          whites.appendChild(note);
+
+          if (position < PIANO_NATURAL_PCS.length - 1 && PIANO_BLACK_AFTER.includes(position)) {
+            const blackPc = pitchClass + 1;
+            const black = document.createElement("span");
+            black.className = "piano-key piano-key-black";
+            black.dataset.pitchClass = String(blackPc);
+            black.dataset.midi = String((octave + 1) * 12 + blackPc);
+            black.dataset.octave = String(octave);
+            black.setAttribute("aria-label", `${PIANO_NOTE_NAMES[blackPc]}${octave}`);
+            black.style.left = `${((whiteIndex + 1) / 21) * 100}%`;
+            blacks.appendChild(black);
+          }
+          whiteIndex += 1;
+        });
+      }
+    }
+
+    /**
+     * 高亮窗口 = 从当前主音那颗键开始的一个八度（含起点、不含高一个八度的同名音）。
+     * 比如 G 调：G3 → F♯4，横跨两个八度，这样主音永远在高亮段的最左边。
+     */
+    function pianoWindow() {
+      const key = WHEEL_KEYS[state.keyIndex];
+      if (!key) return null;
+      const from = 60 + NOTE_PITCH_CLASS[key.majorDisplay];   // 主音落在第 4 八度（键盘中部）
+      return { from, to: from + 12 };
+    }
     const NOTE_PITCH_CLASS = { C: 0, "C#": 1, Db: 1, D: 2, "D#": 3, Eb: 3, E: 4, F: 5, "F#": 6, Gb: 6, G: 7, "G#": 8, Ab: 8, A: 9, "A#": 10, Bb: 10, B: 11 };
 
     function applyPianoZoom() {
@@ -2455,12 +2507,19 @@
       const piano = document.getElementById("roll-piano");
       const key = WHEEL_KEYS[state.keyIndex];
       if (!piano || !key) return;
+      const pitchClass = NOTE_PITCH_CLASS[key.majorDisplay];
       const scalePcs = key.scale.map((n) => NOTE_PITCH_CLASS[n]);
       document.getElementById("piano-root-label").textContent = formatPrettyNote(key.majorDisplay);
-      // 只在中间那个八度（C4–B4）里点亮当前调的七个音，避免整台琴都亮
+
+      buildPianoKeys();   // 固定键盘，只在第一次建
+
+      // 高亮窗口：主音那颗键 → 高一个八度之前，主音永远在最左边
+      const win = pianoWindow();
+      if (!win) return;
       piano.querySelectorAll("[data-pitch-class]").forEach((note) => {
-        const inDisplayOctave = note.dataset.octave === PIANO_DISPLAY_OCTAVE;
-        note.classList.toggle("is-scale", inDisplayOctave && scalePcs.includes(Number(note.dataset.pitchClass)));
+        const midi = Number(note.dataset.midi);
+        const inWindow = midi >= win.from && midi < win.to;
+        note.classList.toggle("is-scale", inWindow && scalePcs.includes(Number(note.dataset.pitchClass)));
       });
     }
 
@@ -2471,8 +2530,11 @@
       if (!piano) return;
       piano.querySelectorAll(".is-scale").forEach((note) => note.classList.remove("is-scale"));
       piano.querySelectorAll(".is-chord").forEach((note) => note.classList.remove("is-chord"));
+      const win = pianoWindow();
+      if (!win) return;
       piano.querySelectorAll("[data-pitch-class]").forEach((note) => {
-        if (note.dataset.octave !== PIANO_DISPLAY_OCTAVE) return;
+        const midi = Number(note.dataset.midi);
+        if (midi < win.from || midi >= win.to) return;
         if (pitchClasses.includes(Number(note.dataset.pitchClass))) note.classList.add("is-chord");
       });
       clearTimeout(pianoChordTimer);
@@ -2483,37 +2545,6 @@
     }
 
     function initRollPiano() {
-      const whites = document.getElementById("piano-white-keys");
-      const blacks = document.getElementById("piano-black-keys");
-      if (!whites || !blacks) return;
-      const noteNames = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
-      let whiteIndex = 0;
-      for (let octave = 3; octave <= 5; octave += 1) {
-        PIANO_WHITE_PITCHES.forEach((pitchClass, position) => {
-          const note = document.createElement("span");
-          note.className = "piano-key piano-key-white";
-          note.dataset.pitchClass = String(pitchClass);
-          note.dataset.midi = String((octave + 1) * 12 + pitchClass);
-          note.dataset.octave = String(octave);
-          note.setAttribute("aria-label", `${noteNames[pitchClass]}${octave}`);
-          if (pitchClass === 0) note.textContent = `C${octave}`;
-          whites.appendChild(note);
-
-          if (position < PIANO_WHITE_PITCHES.length - 1 && PIANO_BLACK_AFTER.includes(position)) {
-            const blackPitch = pitchClass + 1;
-            const black = document.createElement("span");
-            black.className = "piano-key piano-key-black";
-            black.dataset.pitchClass = String(blackPitch);
-            black.dataset.midi = String((octave + 1) * 12 + blackPitch);
-            black.dataset.octave = String(octave);
-            black.setAttribute("aria-label", `${noteNames[blackPitch]}${octave}`);
-            black.style.left = `${((whiteIndex + 1) / 21) * 100}%`;
-            blacks.appendChild(black);
-          }
-          whiteIndex += 1;
-        });
-      }
-
       const piano = document.getElementById("roll-piano");
 
       // 控制盒：单击 = 卷起 / 展开；长按盒身 = 移动整台琴；长按盒角 = 缩放
